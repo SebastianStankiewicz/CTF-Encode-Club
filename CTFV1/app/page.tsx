@@ -1,29 +1,23 @@
 "use client";
 
-import { useMutation } from "convex/react";
-import { api } from "../convex/_generated/api";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { useState, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import bs58 from "bs58";
-import { useCallback, useState } from "react";
+import { web3, AnchorProvider, Program, BN } from "@coral-xyz/anchor";
+import { api } from "../convex/_generated/api";
+import { useMutation } from "convex/react";
 import { verifyOrCreateUser } from "@/convex/myFunctions";
-import Navbar from "./components/Nav-Bar";
+import idl from "@/target/idl/ctf_anchor.json"; // Anchor IDL
+import { CtfAnchor } from "@/target/types/ctf_anchor";
 
-export default function Home() {
-  return (
-    <>
+const PROGRAM_ID = new web3.PublicKey(
+  "GrTTrdzrLzGnLE1rDbxxv4xdZgQi7pNXGeMpb5TaYecF"
+);
 
-      <main className="p-8 flex flex-col gap-16">
-        <h1 className="text-4xl font-bold text-center">Add CTF Challenge</h1>
-        <Content /> 
-      </main>
-    </>
-  );
-}
-
-function Content() {
+export default function Content() {
+  const { publicKey, connected, signMessage } = useWallet();
   const addChallenge = useMutation(api.myFunctions.addChallenge);
-  const { publicKey, signMessage, connected } = useWallet();
+  const verifyOrCreateUserMutation = useMutation(api.myFunctions.verifyOrCreateUser);
 
   const [form, setForm] = useState({
     flagSolution: "",
@@ -34,21 +28,20 @@ function Content() {
     files: "",
   });
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
+  async function computeFlagSha256(flagString: string) {
+    const enc = new TextEncoder();
+    const data = enc.encode(flagString);               // UTF-8 bytes of input
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data); // ArrayBuffer (32 bytes)
+    return new Uint8Array(hashBuffer);                 // Uint8Array(32)
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const verifyOrCreateUser = useMutation(api.myFunctions.verifyOrCreateUser);
-
   const handleSignIn = useCallback(async () => {
-    if (!connected) {
-      alert("Please connect your wallet first!");
-      return;
-    }
-    if (!signMessage) {
-      alert("Your wallet doesn’t support message signing!");
+    if (!connected || !signMessage || !publicKey) {
+      alert("Connect your wallet first!");
       return;
     }
 
@@ -57,42 +50,97 @@ function Content() {
       const signature = await signMessage(message);
       const signatureBase58 = bs58.encode(signature);
 
-      console.log("✅ Signed by:", publicKey?.toBase58());
-      console.log("🖋 Signature (base58):", signatureBase58);
+      console.log("✅ Signed by:", publicKey.toBase58(), signatureBase58);
 
-      const result = await verifyOrCreateUser({
-        publicKey: publicKey?.toBase58() ?? "",
-      });
-
-      if (result.status === "created") {
-        console.log("🆕 New user created:", result.userId);
-        alert(`Welcome new user: ${publicKey?.toBase58().slice(0, 6)}...`);
-      } else if (result.status === "logged_in") {
-        console.log("👋 Existing user logged in:", result.user.publicKey);
-        alert(`Welcome back, ${publicKey?.toBase58().slice(0, 6)}...`);
-      }
+      const result = await verifyOrCreateUserMutation({ publicKey: publicKey.toBase58() });
+      if (result.status === "created") alert("🆕 New user created!");
+      else if (result.status === "logged_in") alert("👋 Welcome back!");
     } catch (err) {
       console.error("❌ Signing failed:", err);
     }
-  }, [signMessage, connected, publicKey, verifyOrCreateUser]);
+  }, [connected, signMessage, publicKey, verifyOrCreateUserMutation]);
 
-  const handleSubmit = async () => {
-    if (!connected) {
-      alert("Please connect and sign in first!");
+  const handleSubmit = useCallback(async () => {
+    if (!connected || !publicKey) {
+      alert("Connect and sign in first!");
       return;
     }
 
-    if (
-      !form.flagSolution ||
-      !form.prizeAmount ||
-      !form.startDate ||
-      !form.endDate
-    ) {
-      alert("Please fill in all required fields!");
+    if (!form.flagSolution || !form.prizeAmount || !form.startDate || !form.endDate) {
+      alert("Fill all required fields!");
       return;
     }
 
     try {
+      // Create Anchor provider using the wallet
+      const provider2 = new AnchorProvider(
+        new web3.Connection("https://api.devnet.solana.com"),
+        {
+          publicKey,
+          signTransaction: async (tx: any) => {
+            await tx.partialSign();
+            return tx;
+          },
+          signAllTransactions: async (txs: any) => txs,
+        } as any,
+        { preflightCommitment: "processed" }
+      );
+
+
+      // Create Anchor provider using the wallet
+      const connection = new web3.Connection("https://api.devnet.solana.com");
+      
+      // Use window.solana (Phantom wallet) directly as the wallet adapter
+      const provider = new AnchorProvider(
+        connection,
+        window.solana,
+        { preflightCommitment: "processed" }
+      );
+
+      //Through context connect my phantom wallet to anchor
+      const program = new Program<CtfAnchor>(idl as CtfAnchor, provider);
+
+
+      // Generate a random challenge ID
+      const challengeId = new BN(Math.floor(Math.random() * 1_000_000));
+
+      // Compute PDA for challenge
+      const [challengePda] = web3.PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("challenge"),
+          publicKey.toBuffer(),
+          challengeId.toArrayLike(Buffer, "le", 8),
+        ],
+        PROGRAM_ID
+      );
+
+      // Encode flag to 32-byte array
+      /*
+      const flagHash = new Uint8Array(32);
+      const encodedFlag = new TextEncoder().encode(form.flagSolution);
+      flagHash.set(encodedFlag.slice(0, 32));
+
+      */
+
+      const hashBytes = await computeFlagSha256(form.flagSolution);
+      // store directly in your 32-byte field:
+      const flagHash = new Uint8Array(32);
+      flagHash.set(hashBytes); // hashBytes is exactly 32 bytes
+      
+
+      // Call your on-chain program
+      const tx = await program.methods
+        .createChallenge(challengeId, flagHash)
+        .accounts({
+          creator: publicKey,
+          challenge: challengePda,
+          systemProgram: web3.SystemProgram.programId,
+        })
+        .rpc();
+
+      console.log("✅ Challenge created on-chain:", tx);
+
+      // Store off-chain data as well
       await addChallenge({
         flagSolution: form.flagSolution,
         prizeAmount: Number(form.prizeAmount),
@@ -100,26 +148,20 @@ function Content() {
         endDate: form.endDate,
         flagDetails: form.flagDetails,
         files: form.files ? form.files.split(",").map((f) => f.trim()) : [],
+        challengePda: challengePda.toBase58(),
       });
 
       alert("✅ Challenge added successfully!");
-      setForm({
-        flagSolution: "",
-        prizeAmount: "",
-        startDate: "",
-        endDate: "",
-        flagDetails: "",
-        files: "",
-      });
+      setForm({ flagSolution: "", prizeAmount: "", startDate: "", endDate: "", flagDetails: "", files: "" });
     } catch (err) {
-      console.error("❌ Failed to add challenge:", err);
-      alert("Error adding challenge. Check console for details.");
+      console.error("❌ Failed to create challenge:", err);
+      alert("Error creating challenge. See console.");
     }
-  };
+  }, [connected, publicKey, form, addChallenge]);
 
   return (
     <div className="flex flex-col gap-8 max-w-lg mx-auto">
-      {/* 🔐 Wallet Section */}
+      {/* Wallet Section */}
       <div className="flex flex-col gap-2">
         <button
           onClick={handleSignIn}
@@ -130,7 +172,7 @@ function Content() {
         </button>
       </div>
 
-      {/* 🧩 Add Challenge Form */}
+      {/* Add Challenge Form */}
       <div className="flex flex-col gap-4 bg-slate-100 dark:bg-slate-900 p-6 rounded-lg shadow-lg">
         <h2 className="text-xl font-semibold mb-2">Create New Challenge</h2>
 

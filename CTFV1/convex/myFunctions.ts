@@ -87,6 +87,7 @@ export const addChallenge = mutation({
     endDate: v.string(),
     files: v.optional(v.array(v.string())),
     flagDetails: v.string(),
+    challengePda: v.any(),
   },
 
   // Mutation implementation.
