@@ -103,6 +103,7 @@ export const addChallenge = mutation({
       endDate: args.endDate,
       files: args.files ?? [],
       flagDetails: args.flagDetails,
+      challengePda: args.challengePda
     });
 
     console.log("Added new challenge with id:", id);

@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import bs58 from "bs58";
 import { web3, AnchorProvider, Program, BN } from "@coral-xyz/anchor";
-import { api } from "../convex/_generated/api";
+import { api } from "../../convex/_generated/api";
 import { useMutation } from "convex/react";
 import { verifyOrCreateUser } from "@/convex/myFunctions";
 import idl from "@/target/idl/ctf_anchor.json"; // Anchor IDL
