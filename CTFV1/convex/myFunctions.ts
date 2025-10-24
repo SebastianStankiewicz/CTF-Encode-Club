@@ -87,6 +87,11 @@ export const addChallenge = mutation({
     endDate: v.string(),
     files: v.optional(v.array(v.string())),
     flagDetails: v.string(),
+    challengeType: v.optional(v.string()),
+    flagFormat: v.optional(v.string()),
+    hint: v.optional(v.string()),
+    hintReleaseDate: v.optional(v.string()),
+    keepAfterFirstSolve: v.optional(v.boolean()),
   },
 
   // Mutation implementation.
@@ -102,6 +107,11 @@ export const addChallenge = mutation({
       endDate: args.endDate,
       files: args.files ?? [],
       flagDetails: args.flagDetails,
+      challengeType: args.challengeType ?? "misc",
+      flagFormat: args.flagFormat,
+      hint: args.hint,
+      hintReleaseDate: args.hintReleaseDate,
+      keepAfterFirstSolve: args.keepAfterFirstSolve ?? true,
     });
 
     console.log("Added new challenge with id:", id);
@@ -156,6 +166,37 @@ export const getChallengeBySlug = query({
 
     if (!challenge) return null;
     return challenge;
+  },
+});
+
+// Get all challenges
+export const getAllChallenges = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 50;
+    
+    const challenges = await ctx.db
+      .query("challenges")
+      .order("desc")
+      .take(limit);
+
+    return challenges.map(challenge => ({
+      _id: challenge._id,
+      flagSolution: challenge.flagSolution,
+      prizeAmount: challenge.prizeAmount,
+      startDate: challenge.startDate,
+      endDate: challenge.endDate,
+      flagDetails: challenge.flagDetails,
+      files: challenge.files || [],
+      challengeType: challenge.challengeType || "misc",
+      flagFormat: challenge.flagFormat,
+      hint: challenge.hint,
+      hintReleaseDate: challenge.hintReleaseDate,
+      keepAfterFirstSolve: challenge.keepAfterFirstSolve ?? true,
+      _creationTime: challenge._creationTime,
+    }));
   },
 });
 

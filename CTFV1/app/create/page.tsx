@@ -100,6 +100,11 @@ function Content() {
         files: form.files
           ? form.files.split(",").map((f) => f.trim())
           : [],
+        challengeType: form.challengeType,
+        flagFormat: form.flagFormat,
+        hint: form.hint,
+        hintReleaseDate: form.hintReleaseDate,
+        keepAfterFirstSolve: form.keepAfterFirstSolve,
       });
 
       alert("Challenge added successfully!");
