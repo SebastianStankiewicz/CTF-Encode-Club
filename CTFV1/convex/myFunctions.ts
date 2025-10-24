@@ -115,6 +115,7 @@ export const verifyOrCreateUser = mutation({
   // Validators for arguments.
   args: {
     publicKey: v.string(),
+    username: v.optional(v.string()),
   },
 
   // Mutation implementation.
@@ -133,6 +134,7 @@ export const verifyOrCreateUser = mutation({
     //// If not, create a new user.
     const newUserId = await ctx.db.insert("users", {
       publicKey: args.publicKey,
+      username: args.username || `User_${args.publicKey.slice(0, 8)}`,
       createdAt: new Date().toISOString(),
       score: 0,
     });
@@ -167,5 +169,126 @@ export const getUserByPublicKey = query({
 
     if (!challenge) return null;
     return challenge;
+  },
+});
+
+// Get leaderboard data
+export const getLeaderboard = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 50;
+    
+    const users = await ctx.db
+      .query("users")
+      .order("desc")
+      .take(limit);
+
+    // Sort by score in descending order
+    const sortedUsers = users
+      .filter(user => user.score > 0) // Only show users with points
+      .sort((a, b) => b.score - a.score)
+      .map((user, index) => ({
+        rank: index + 1,
+        publicKey: user.publicKey,
+        score: user.score,
+        username: user.username || user.publicKey.slice(0, 8) + "...",
+        createdAt: user.createdAt,
+      }));
+
+    return sortedUsers;
+  },
+});
+
+// Update user score (for when they solve challenges)
+export const updateUserScore = mutation({
+  args: {
+    publicKey: v.string(),
+    points: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .filter(q => q.eq(q.field("publicKey"), args.publicKey))
+      .first();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    await ctx.db.patch(user._id, {
+      score: user.score + args.points,
+    });
+
+    console.log(`Updated user ${args.publicKey} score by ${args.points} points`);
+    return { newScore: user.score + args.points };
+  },
+});
+
+// Get user stats
+export const getUserStats = query({
+  args: { publicKey: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .filter(q => q.eq(q.field("publicKey"), args.publicKey))
+      .first();
+
+    if (!user) return null;
+
+    // Get all users to calculate rank
+    const allUsers = await ctx.db
+      .query("users")
+      .collect();
+
+    const sortedUsers = allUsers
+      .filter(u => u.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    const userRank = sortedUsers.findIndex(u => u._id === user._id) + 1;
+
+    return {
+      ...user,
+      rank: userRank > 0 ? userRank : null,
+      totalUsers: sortedUsers.length,
+    };
+  },
+});
+
+// Test function to add sample leaderboard data
+export const addSampleUsers = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const sampleUsers = [
+      { publicKey: "Alice123456789", username: "alice_hacker", score: 2450 },
+      { publicKey: "Bob987654321", username: "bob_security", score: 2340 },
+      { publicKey: "Charlie111222", username: "charlie_pwn", score: 2150 },
+      { publicKey: "Diana333444", username: "diana_crypto", score: 1980 },
+      { publicKey: "Eve555666", username: "eve_reverse", score: 1875 },
+      { publicKey: "Frank777888", username: "frank_web", score: 1720 },
+      { publicKey: "Grace999000", username: "grace_forensics", score: 1650 },
+      { publicKey: "Henry111333", username: "henry_exploit", score: 1540 },
+    ];
+
+    for (const user of sampleUsers) {
+      // Check if user already exists
+      const existingUser = await ctx.db
+        .query("users")
+        .filter(q => q.eq(q.field("publicKey"), user.publicKey))
+        .first();
+
+      if (!existingUser) {
+        await ctx.db.insert("users", {
+          publicKey: user.publicKey,
+          username: user.username,
+          score: user.score,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    console.log("Sample users added to leaderboard");
+    return { status: "success", message: "Sample users added" };
   },
 });

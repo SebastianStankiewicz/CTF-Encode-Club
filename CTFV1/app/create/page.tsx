@@ -5,12 +5,10 @@ import { api } from "@/convex/_generated/api";
 import { useWallet } from "@solana/wallet-adapter-react";
 import bs58 from "bs58";
 import { useCallback, useState } from "react";
-import WalletTest from "./components/WalletTest";
 
 export default function Home() {
   return (
     <main className="min-h-screen p-8 flex flex-col gap-16">
-      <WalletTest />
       <Content />
     </main>
   );
@@ -27,6 +25,11 @@ function Content() {
 
   const [form, setForm] = useState({
     flagSolution: "",
+    flagFormat: "",
+    hint: "",
+    hintReleaseDate: "",
+    keepAfterFirstSolve: true,
+    challengeType: "",
     prizeAmount: "",
     startDate: "",
     endDate: "",
@@ -35,9 +38,11 @@ function Content() {
   });
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
+    setForm({ ...form, [name]: type === "checkbox" ? checked : value });
   };
 
   const handleSignIn = useCallback(async () => {
@@ -87,10 +92,10 @@ function Content() {
     setIsSubmitting(true);
     try {
       await addChallenge({
-        flagSolution,
-        prizeAmount: Number(prizeAmount),
-        startDate,
-        endDate,
+        flagSolution: form.flagSolution,
+        prizeAmount: Number(form.prizeAmount),
+        startDate: form.startDate,
+        endDate: form.endDate,
         flagDetails: form.flagDetails,
         files: form.files
           ? form.files.split(",").map((f) => f.trim())
@@ -100,6 +105,11 @@ function Content() {
       alert("Challenge added successfully!");
       setForm({
         flagSolution: "",
+        flagFormat: "",
+        hint: "",
+        hintReleaseDate: "",
+        keepAfterFirstSolve: true,
+        challengeType: "",
         prizeAmount: "",
         startDate: "",
         endDate: "",
@@ -120,51 +130,105 @@ function Content() {
       <div className="flex flex-col gap-4 border border-foreground/10 bg-foreground/5 p-6 rounded-lg">
         <h2 className="text-xl font-semibold font-mono">Create New Challenge</h2>
 
+        {/* Challenge Type */}
+        <select
+          name="challengeType"
+          value={form.challengeType}
+          onChange={handleChange}
+          className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:ring-2 focus:ring-purple-500"
+        >
+          <option value="web">Web</option>
+          <option value="pwn">Pwn</option>
+          <option value="reverse">Reverse</option>
+          <option value="osint">OSINT</option>
+          <option value="forensics">Forensics</option>
+          <option value="misc">Misc</option>
+        </select>
+
+        {/* Flag */}
         <input
           name="flagSolution"
           placeholder="Flag Solution *"
           value={form.flagSolution}
           onChange={handleChange}
-          className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
-          required
+          className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:ring-2 focus:ring-purple-500"
         />
 
+        {/* Flag Format */}
         <input
-          name="prizeAmount"
-          type="number"
-          placeholder="Prize Amount (SOL) *"
-          value={form.prizeAmount}
+          name="flagFormat"
+          placeholder="Flag Format (e.g. CTF{.*})"
+          value={form.flagFormat}
           onChange={handleChange}
-          className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
-          required
+          className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:ring-2 focus:ring-purple-500"
         />
 
+        {/* Hint */}
+        <textarea
+          name="hint"
+          placeholder="Hint (optional)"
+          value={form.hint}
+          onChange={handleChange}
+          rows={2}
+          className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground resize-none focus:ring-2 focus:ring-purple-500"
+        />
+
+        {/* Hint Release Date */}
+        <input
+          name="hintReleaseDate"
+          type="date"
+          value={form.hintReleaseDate}
+          onChange={handleChange}
+          className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:ring-2 focus:ring-purple-500"
+        />
+
+        {/* Keep after first solve */}
+        <label className="flex items-center gap-2 text-sm text-foreground/70">
+          <input
+            type="checkbox"
+            name="keepAfterFirstSolve"
+            checked={form.keepAfterFirstSolve}
+            onChange={handleChange}
+          />
+          Keep visible after first solve
+        </label>
+
+        {/* Dates */}
         <div className="grid grid-cols-2 gap-4">
           <input
             name="startDate"
             type="date"
             value={form.startDate}
             onChange={handleChange}
-            className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
-            required
+            className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:ring-2 focus:ring-purple-500"
           />
           <input
             name="endDate"
             type="date"
             value={form.endDate}
             onChange={handleChange}
-            className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
-            required
+            className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:ring-2 focus:ring-purple-500"
           />
         </div>
 
+        {/* Prize */}
+        <input
+          name="prizeAmount"
+          type="number"
+          placeholder="Prize Amount (SOL) *"
+          value={form.prizeAmount}
+          onChange={handleChange}
+          className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:ring-2 focus:ring-purple-500"
+        />
+
+        {/* Extra info */}
         <textarea
           name="flagDetails"
           placeholder="Flag Details (optional)"
           value={form.flagDetails}
           onChange={handleChange}
           rows={3}
-          className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-purple-500 transition resize-none"
+          className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground resize-none focus:ring-2 focus:ring-purple-500"
         />
 
         <input
@@ -172,13 +236,13 @@ function Content() {
           placeholder="File URLs (comma-separated)"
           value={form.files}
           onChange={handleChange}
-          className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+          className="p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:ring-2 focus:ring-purple-500"
         />
 
         <button
           onClick={handleSubmit}
           disabled={!isSignedIn || isSubmitting}
-          className="mt-4 px-6 py-3 rounded-md font-medium text-gray-700 border border-gray-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="mt-4 px-6 py-3 rounded-md font-medium text-gray-700 border border-gray-700 hover:bg-gray-800 transition disabled:opacity-50"
         >
           {isSubmitting ? "Adding..." : "Add Challenge"}
         </button>
