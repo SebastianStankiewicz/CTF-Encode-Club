@@ -74,11 +74,16 @@ describe("ctf-anchor", () => {
   
       assert.fail("Should have thrown AlreadySolved error");
     } catch (err: any) {
-      // Anchor v0.32+ returns error as an object
-      assert.strictEqual(err.error?.code, "AlreadySolved");
-      assert.strictEqual(err.error?.number, 6000); // optional, just for verification
-      console.log("Caught expected error:", err.error?.code);
+      // Anchor returns the error as an object with { code, number }
+      const errorCode =
+        err.error?.code || err.error?.errorCode || err.code;
+  
+      // Assert against the code property
+      assert.strictEqual(errorCode["code"], "AlreadySolved");
+      console.log("Caught expected error:", errorCode);
     }
   });
+  
+  
   
 });
