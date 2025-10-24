@@ -76,3 +76,83 @@ export const myAction = action({
     });
   },
 });
+
+
+export const addChallenge = mutation({
+  // Validators for arguments.
+  args: {
+    flagSolution: v.string(),
+    prizeAmount: v.number(),
+    startDate: v.string(),
+    endDate: v.string(),
+    files: v.optional(v.array(v.string())),
+    flagDetails: v.string(),
+  },
+
+  // Mutation implementation.
+  handler: async (ctx, args) => {
+    //// Insert or modify documents in the database here.
+    //// Mutations can also read from the database like queries.
+    //// See https://docs.convex.dev/database/writing-data.
+
+    const id = await ctx.db.insert("challenges", {
+      flagSolution: args.flagSolution,
+      prizeAmount: args.prizeAmount,
+      startDate: args.startDate,
+      endDate: args.endDate,
+      files: args.files ?? [],
+      flagDetails: args.flagDetails,
+    });
+
+    console.log("Added new challenge with id:", id);
+    // Optionally, return a value from your mutation.
+    // return id;
+  },
+});
+
+
+export const verifyOrCreateUser = mutation({
+  // Validators for arguments.
+  args: {
+    publicKey: v.string(),
+  },
+
+  // Mutation implementation.
+  handler: async (ctx, args) => {
+    //// Check if user already exists in "users" table.
+    const existingUser = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), args.publicKey))
+      .first();
+
+    if (existingUser) {
+      console.log("User already exists:", existingUser.publicKey);
+      return { status: "logged_in", user: existingUser };
+    }
+
+    //// If not, create a new user.
+    const newUserId = await ctx.db.insert("users", {
+      publicKey: args.publicKey,
+      createdAt: new Date().toISOString(),
+      score: 0,
+    });
+
+    console.log("Created new user with id:", newUserId);
+
+    return { status: "created", userId: newUserId };
+  },
+});
+
+
+export const getChallengeBySlug = query({
+  args: { slug: v.string() },
+  handler: async (ctx, args) => {
+    const challenge = await ctx.db
+      .query("challenges")
+      .filter(q => q.eq(q.field("_id"), args.slug))
+      .first();
+
+    if (!challenge) return null;
+    return challenge;
+  },
+});
