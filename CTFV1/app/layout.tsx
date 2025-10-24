@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { SolanaProvider } from "./wallet-providers";
-
+import Navbar from "./components/Nav-Bar";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -33,7 +33,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ConvexClientProvider>
-        <SolanaProvider>{children}</SolanaProvider>
+        <SolanaProvider>
+            <Navbar /> {/* Now wrapped in SolanaProvider */}
+            {children}
+          </SolanaProvider>
         </ConvexClientProvider>
       </body>
     </html>

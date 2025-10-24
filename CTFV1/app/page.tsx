@@ -7,17 +7,15 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import bs58 from "bs58";
 import { useCallback, useState } from "react";
 import { verifyOrCreateUser } from "@/convex/myFunctions";
+import Navbar from "./components/Nav-Bar";
 
 export default function Home() {
   return (
     <>
-      <header className="sticky top-0 z-10 bg-background p-4 border-b-2 border-slate-200 dark:border-slate-800 flex flex-row justify-between items-center">
-        CTF Challenge Manager
-        <WalletMultiButton />
-      </header>
+
       <main className="p-8 flex flex-col gap-16">
         <h1 className="text-4xl font-bold text-center">Add CTF Challenge</h1>
-        <Content />
+        <Content /> 
       </main>
     </>
   );
@@ -36,7 +34,9 @@ function Content() {
     files: "",
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
@@ -51,19 +51,19 @@ function Content() {
       alert("Your wallet doesn’t support message signing!");
       return;
     }
-  
+
     try {
       const message = new TextEncoder().encode("Sign in to CTF Manager");
       const signature = await signMessage(message);
       const signatureBase58 = bs58.encode(signature);
-  
+
       console.log("✅ Signed by:", publicKey?.toBase58());
       console.log("🖋 Signature (base58):", signatureBase58);
-  
+
       const result = await verifyOrCreateUser({
         publicKey: publicKey?.toBase58() ?? "",
       });
-  
+
       if (result.status === "created") {
         console.log("🆕 New user created:", result.userId);
         alert(`Welcome new user: ${publicKey?.toBase58().slice(0, 6)}...`);
@@ -71,13 +71,10 @@ function Content() {
         console.log("👋 Existing user logged in:", result.user.publicKey);
         alert(`Welcome back, ${publicKey?.toBase58().slice(0, 6)}...`);
       }
-  
     } catch (err) {
       console.error("❌ Signing failed:", err);
     }
   }, [signMessage, connected, publicKey, verifyOrCreateUser]);
-  
-  
 
   const handleSubmit = async () => {
     if (!connected) {
@@ -102,7 +99,7 @@ function Content() {
         startDate: form.startDate,
         endDate: form.endDate,
         flagDetails: form.flagDetails,
-        files: form.files ? form.files.split(",").map(f => f.trim()) : [],
+        files: form.files ? form.files.split(",").map((f) => f.trim()) : [],
       });
 
       alert("✅ Challenge added successfully!");
