@@ -8,9 +8,8 @@ export default function ChallengePage() {
   const params = useParams();
   const slug = params.slug;
   
-  const challenge = useQuery(api.myFunctions.getChallengeBySlug, { 
-    slug: slug 
-  });
+  const challenge = useQuery<any>(api.myFunctions.getChallengeBySlug, { slug });
+
 
   // Loading state
   if (challenge === undefined) {
@@ -75,7 +74,7 @@ export default function ChallengePage() {
           <div className="mt-8">
             <h2 className="text-2xl font-bold mb-4">Challenge Files</h2>
             <div className="space-y-2">
-              {challenge.files.map((file, index) => (
+              {challenge.files.map((file: any, index: number) => (
                 <a 
                   key={index}
                   href={file}

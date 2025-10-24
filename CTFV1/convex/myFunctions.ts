@@ -156,3 +156,16 @@ export const getChallengeBySlug = query({
     return challenge;
   },
 });
+
+export const getUserByPublicKey = query({
+  args: { slug: v.string() },
+  handler: async (ctx, args) => {
+    const challenge = await ctx.db
+      .query("users")
+      .filter(q => q.eq(q.field("publicKey"), args.slug))
+      .first();
+
+    if (!challenge) return null;
+    return challenge;
+  },
+});
