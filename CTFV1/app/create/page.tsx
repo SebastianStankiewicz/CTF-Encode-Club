@@ -1,5 +1,5 @@
 "use client";
-
+import * as anchor from "@coral-xyz/anchor";
 import { useState, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import bs58 from "bs58";
@@ -9,6 +9,7 @@ import { useMutation } from "convex/react";
 import { verifyOrCreateUser } from "@/convex/myFunctions";
 import idl from "@/target/idl/ctf_anchor.json"; // Anchor IDL
 import { CtfAnchor } from "@/target/types/ctf_anchor";
+import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
 const PROGRAM_ID = new web3.PublicKey(
   "GrTTrdzrLzGnLE1rDbxxv4xdZgQi7pNXGeMpb5TaYecF"
@@ -73,23 +74,6 @@ export default function Content() {
 
     try {
       // Create Anchor provider using the wallet
-      /*
-      const provider2 = new AnchorProvider(
-        new web3.Connection("https://api.devnet.solana.com"),
-        {
-          publicKey,
-          signTransaction: async (tx: any) => {
-            await tx.partialSign();
-            return tx;
-          },
-          signAllTransactions: async (txs: any) => txs,
-        } as any,
-        { preflightCommitment: "processed" }
-      );
-      */
-
-
-      // Create Anchor provider using the wallet
       const connection = new web3.Connection("https://api.devnet.solana.com");
       
       // Use window.solana (Phantom wallet) directly as the wallet adapter
@@ -116,23 +100,17 @@ export default function Content() {
         PROGRAM_ID
       );
 
-      // Encode flag to 32-byte array
-      /*
-      const flagHash = new Uint8Array(32);
-      const encodedFlag = new TextEncoder().encode(form.flagSolution);
-      flagHash.set(encodedFlag.slice(0, 32));
-
-      */
 
       const hashBytes = await computeFlagSha256(form.flagSolution);
       // store directly in your 32-byte field:
       const flagHash = new Uint8Array(32);
       flagHash.set(hashBytes); // hashBytes is exactly 32 bytes
-      
+      const depositSol = Number(form.prizeAmount);
+      const depositLamports = new anchor.BN(depositSol * LAMPORTS_PER_SOL);
 
       // Call your on-chain program
       const tx = await program.methods
-        .createChallenge(challengeId, flagHash)
+        .createChallenge(challengeId, flagHash, depositLamports)
         .accounts({
           creator: publicKey,
           challenge: challengePda,
