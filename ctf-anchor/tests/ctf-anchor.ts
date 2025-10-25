@@ -12,18 +12,18 @@ describe("ctf-anchor (SOL deposit + rehashed guesses)", () => {
   const program = anchor.workspace.ctfAnchor as Program<CtfAnchor>;
   const creator = provider.wallet.publicKey;
 
-  // Random challenge ID each run
+  // Random challenge ID for this test run
   const challengeId = new anchor.BN(Math.floor(Math.random() * 1_000_000));
 
   // Plaintext flags
   const plaintextFlag = "flag{super_secret_flag}";
   const wrongFlag = "flag{wrong_one}";
 
-  // Hash the flag before storing it (to simulate a hidden server-side flag)
+  // Hash the flag for storage
   const flagHash = crypto.createHash("sha256").update(plaintextFlag).digest();
 
   // Derive PDA for challenge
-  const [challengePda] = PublicKey.findProgramAddressSync(
+  const [challengePda, bump] = PublicKey.findProgramAddressSync(
     [
       Buffer.from("challenge"),
       creator.toBuffer(),
@@ -33,7 +33,7 @@ describe("ctf-anchor (SOL deposit + rehashed guesses)", () => {
   );
 
   it("Creates a challenge with 0.01 SOL deposit", async () => {
-    const depositSol = 0.01;
+    const depositSol = 0.001;
     const depositLamports = new anchor.BN(depositSol * LAMPORTS_PER_SOL);
 
     const beforeBalance = await provider.connection.getBalance(challengePda);
@@ -51,7 +51,6 @@ describe("ctf-anchor (SOL deposit + rehashed guesses)", () => {
 
     const afterBalance = await provider.connection.getBalance(challengePda);
     const diff = afterBalance - beforeBalance;
-
     console.log(`Lamports before: ${beforeBalance}, after: ${afterBalance}, diff: ${diff}`);
     assert.ok(diff >= depositLamports.toNumber(), "SOL not deposited correctly");
 
@@ -61,43 +60,62 @@ describe("ctf-anchor (SOL deposit + rehashed guesses)", () => {
     assert.strictEqual(challengeAccount.isSolved, false);
   });
 
-  it("Rejects an incorrect plaintext guess", async () => {
-    const tx = await program.methods
-      .submitGuess(wrongFlag)
+  it("Rejects an incorrect plaintext guess first", async () => {
+    await program.methods
+      .submitGuess(wrongFlag, bump)
       .accounts({
         guesser: creator,
         challenge: challengePda,
+        systemProgram: SystemProgram.programId,
       })
       .rpc();
-
-    console.log("Submitted WRONG guess, tx:", tx);
 
     const challengeAccount = await program.account.challengeData.fetch(challengePda);
     assert.strictEqual(challengeAccount.isSolved, false, "Challenge should NOT be solved yet");
   });
 
-  it("Accepts the correct plaintext guess", async () => {
-    const tx = await program.methods
-      .submitGuess(plaintextFlag)
-      .accounts({
-        guesser: creator,
-        challenge: challengePda,
-      })
-      .rpc();
-
-    console.log("Submitted correct guess, tx:", tx);
-
+  it("Accepts the correct plaintext guess and transfers SOL", async () => {
+    const beforeBalance = await provider.connection.getBalance(creator);
+  
+    try {
+      await program.methods
+        .submitGuess(plaintextFlag, bump)
+        .accounts({
+          guesser: creator,
+          challenge: challengePda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+    } catch (err: any) {
+      // If the tx fails, print all logs
+      if (err.logs) {
+        console.log("Transaction logs:");
+        err.logs.forEach((l: string) => console.log(l));
+      } else if (err.error?.logs) {
+        console.log("Transaction logs:");
+        err.error.logs.forEach((l: string) => console.log(l));
+      } else {
+        console.error(err);
+      }
+      throw err; // rethrow so the test still fails
+    }
+  
+    const afterBalance = await provider.connection.getBalance(creator);
+    assert.ok(afterBalance > beforeBalance, "SOL should have been transferred to guesser");
+  
     const challengeAccount = await program.account.challengeData.fetch(challengePda);
     assert.strictEqual(challengeAccount.isSolved, true, "Challenge should be solved now");
   });
+  
 
   it("Rejects a second wrong guess after solved", async () => {
     try {
       await program.methods
-        .submitGuess(wrongFlag)
+        .submitGuess(wrongFlag, bump)
         .accounts({
           guesser: creator,
           challenge: challengePda,
+          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -113,4 +131,3 @@ describe("ctf-anchor (SOL deposit + rehashed guesses)", () => {
     }
   });
 });
-
