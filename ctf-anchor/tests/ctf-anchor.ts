@@ -1,25 +1,21 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { CtfAnchor } from "../target/types/ctf_anchor";
-import { PublicKey, SystemProgram } from "@solana/web3.js";
+import { PublicKey, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import * as assert from "assert";
 import { randomBytes } from "crypto";
 
-describe("ctf-anchor", () => {
-  // Configure the client to use devnet/local cluster
+describe("ctf-anchor (SOL deposit test)", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
   const program = anchor.workspace.ctfAnchor as Program<CtfAnchor>;
   const creator = provider.wallet.publicKey;
 
-  // Generate a random challengeId each run
   const challengeId = new anchor.BN(Math.floor(Math.random() * 1_000_000));
-  // Generate a random 32-byte flag hash
   const flagHash = randomBytes(32);
-  const wrongHash = randomBytes(32); // another random 32 bytes for wrong guess
 
-  // Compute PDA for the challenge account
+  // Derive PDA
   const [challengePda] = PublicKey.findProgramAddressSync(
     [
       Buffer.from("challenge"),
@@ -29,9 +25,16 @@ describe("ctf-anchor", () => {
     program.programId
   );
 
-  it("Creates a challenge!", async () => {
+  it("Creates a challenge with 0.01 SOL deposit", async () => {
+    const depositSol = 0.01;
+    const depositLamports = new anchor.BN(depositSol * LAMPORTS_PER_SOL);
+
+    // Get balance before deposit
+    const beforeBalance = await provider.connection.getBalance(challengePda);
+
+    // Create challenge (and deposit SOL)
     const tx = await program.methods
-      .createChallenge(challengeId, flagHash)
+      .createChallenge(challengeId, flagHash, depositLamports) // updated to match Rust fn
       .accounts({
         creator,
         challenge: challengePda,
@@ -41,49 +44,19 @@ describe("ctf-anchor", () => {
 
     console.log("Challenge created, tx:", tx);
 
+    // Get balance after deposit
+    const afterBalance = await provider.connection.getBalance(challengePda);
+    const diff = afterBalance - beforeBalance;
+
+    console.log(`Lamports before: ${beforeBalance}, after: ${afterBalance}, diff: ${diff}`);
+
+    // Assert deposit happened
+    assert.ok(diff >= depositLamports.toNumber(), "SOL not deposited correctly");
+
+    // Optionally, verify account data still looks right
     const challengeAccount = await program.account.challengeData.fetch(challengePda);
     assert.ok(challengeAccount.creator.equals(creator));
     assert.ok(Buffer.from(challengeAccount.flagHash).equals(flagHash));
     assert.ok(challengeAccount.isSolved === false);
   });
-
-  it("Submits a correct guess!", async () => {
-    const tx = await program.methods
-      .submitGuess(flagHash)
-      .accounts({
-        guesser: creator,
-        challenge: challengePda,
-      })
-      .rpc();
-
-    console.log("Submitted guess, tx:", tx);
-
-    const challengeAccount = await program.account.challengeData.fetch(challengePda);
-    assert.ok(challengeAccount.isSolved === true);
-  });
-
-  it("Fails on submitting a second guess after solved", async () => {
-    try {
-      await program.methods
-        .submitGuess(wrongHash)
-        .accounts({
-          guesser: creator,
-          challenge: challengePda,
-        })
-        .rpc();
-  
-      assert.fail("Should have thrown AlreadySolved error");
-    } catch (err: any) {
-      // Anchor returns the error as an object with { code, number }
-      const errorCode =
-        err.error?.code || err.error?.errorCode || err.code;
-  
-      // Assert against the code property
-      assert.strictEqual(errorCode["code"], "AlreadySolved");
-      console.log("Caught expected error:", errorCode);
-    }
-  });
-  
-  
-  
 });

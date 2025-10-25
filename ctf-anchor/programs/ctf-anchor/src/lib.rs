@@ -6,20 +6,50 @@ declare_id!("GrTTrdzrLzGnLE1rDbxxv4xdZgQi7pNXGeMpb5TaYecF");
 pub mod ctf_anchor {
     use super::*;
 
-    pub fn create_challenge(ctx: Context<CreateChallenge>, challenge_id: u64, flag_hash: [u8; 32]) -> Result<()> {
+    pub fn create_challenge(
+        ctx: Context<CreateChallenge>,
+        challenge_id: u64,
+        flag_hash: [u8; 32],
+        deposit_lamports: u64,
+    ) -> Result<()> {
         msg!("Creating Challenge PDA...");
-
+    
+        // Clone the PDA key & account info before mut borrow
+        let challenge_key = ctx.accounts.challenge.key();
+        let challenge_account_info = ctx.accounts.challenge.to_account_info();
+    
         let challenge = &mut ctx.accounts.challenge;
-
         challenge.creator = *ctx.accounts.creator.key;
         challenge.flag_hash = flag_hash;
         challenge.is_solved = false;
-
+    
+        // Transfer SOL from creator to PDA
+        if deposit_lamports > 0 {
+            let ix = anchor_lang::solana_program::system_instruction::transfer(
+                &ctx.accounts.creator.key(),
+                &challenge_key,
+                deposit_lamports,
+            );
+    
+            anchor_lang::solana_program::program::invoke(
+                &ix,
+                &[
+                    ctx.accounts.creator.to_account_info(),
+                    challenge_account_info,
+                ],
+            )?;
+    
+            msg!("Deposited {} lamports into the Challenge PDA.", deposit_lamports);
+        }
+    
         msg!("Challenge PDA created successfully:");
         msg!(" Creator: {}", challenge.creator);
         msg!(" Challenge ID: {}", challenge_id);
         Ok(())
     }
+    
+    
+    
 
     pub fn submit_guess(ctx: Context<SubmitGuess>, guess_hash: [u8; 32]) -> Result<()> {
         let challenge = &mut ctx.accounts.challenge;
