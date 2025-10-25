@@ -156,14 +156,47 @@ export const addChallenge = mutation({
     difficulty: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { creatorPublicKey, ...challengeData } = args;
+    const { creatorPublicKey, difficulty, ...challengeData } = args;
+
+    // Set points based on difficulty
+    let pointsReward = 100; // Default to easy
+    if (difficulty === "medium") pointsReward = 300;
+    if (difficulty === "hard") pointsReward = 500;
 
     const challengeId = await ctx.db.insert("challenges", {
       ...challengeData,
       creatorPublicKey,
+      difficulty: difficulty || "easy",
+      pointsReward,
+      solveCount: 0,
+      createdAt: Date.now(),
     });
 
-    return challengeId;
+    // Give creator 500 points for creating a challenge
+    const creator = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), creatorPublicKey))
+      .first();
+
+    if (creator) {
+      await ctx.db.patch(creator._id, {
+        score: (creator.score || 0) + 500,
+      });
+    } else {
+      // Create user if doesn't exist
+      await ctx.db.insert("users", {
+        publicKey: creatorPublicKey,
+        username: `Creator_${creatorPublicKey.slice(0, 8)}`,
+        createdAt: new Date().toISOString(),
+        score: 500,
+      });
+    }
+
+    return {
+      challengeId,
+      pointsEarned: 500,
+      challengePoints: pointsReward,
+    };
   },
 });
 
@@ -356,6 +389,248 @@ export const getLeaderboard = query({
   },
 });
 
+export const getChallengeLeaderboard = query({
+  args: {
+    challengeId: v.id("challenges"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 50;
+
+    // Get all solves for this challenge
+    const solves = await ctx.db
+      .query("solves")
+      .filter((q) => q.eq(q.field("challengeId"), args.challengeId))
+      .collect();
+
+    // Sort by solve time (earliest first)
+    const sortedSolves = solves.sort((a, b) => a.solvedAt - b.solvedAt);
+
+    // Get user data for each solve
+    const leaderboard = [];
+    for (let i = 0; i < Math.min(sortedSolves.length, limit); i++) {
+      const solve = sortedSolves[i];
+      const user = await ctx.db
+        .query("users")
+        .filter((q) => q.eq(q.field("publicKey"), solve.userPublicKey))
+        .first();
+
+      if (user) {
+        leaderboard.push({
+          rank: i + 1,
+          publicKey: solve.userPublicKey,
+          username: user.username || user.publicKey.slice(0, 8) + "...",
+          solvedAt: solve.solvedAt,
+          pointsEarned: solve.pointsEarned,
+          timeToSolve: solve.solvedAt, // You might want to calculate this relative to challenge start
+        });
+      }
+    }
+
+    return {
+      leaderboard,
+      totalSolvers: solves.length,
+    };
+  },
+});
+
+export const getChallengeStats = query({
+  args: {
+    challengeId: v.id("challenges"),
+  },
+  handler: async (ctx, args) => {
+    const challenge = await ctx.db.get(args.challengeId);
+    if (!challenge) return null;
+
+    const solves = await ctx.db
+      .query("solves")
+      .filter((q) => q.eq(q.field("challengeId"), args.challengeId))
+      .collect();
+
+    const tips = await ctx.db
+      .query("tips")
+      .filter((q) => q.eq(q.field("challengeId"), args.challengeId))
+      .collect();
+
+    const comments = await ctx.db
+      .query("comments")
+      .filter((q) => q.eq(q.field("challengeId"), args.challengeId))
+      .collect();
+
+    const firstSolve = solves.length > 0 ? 
+      solves.reduce((earliest, solve) => 
+        solve.solvedAt < earliest.solvedAt ? solve : earliest
+      ) : null;
+
+    const totalTips = tips.reduce((sum, tip) => sum + tip.amount, 0);
+
+    return {
+      challenge: {
+        ...challenge,
+        flagSolution: undefined, // Don't expose the flag
+      },
+      stats: {
+        totalSolvers: solves.length,
+        totalTips,
+        totalComments: comments.length,
+        firstSolve: firstSolve ? {
+          userPublicKey: firstSolve.userPublicKey,
+          solvedAt: firstSolve.solvedAt,
+          timeToSolve: firstSolve.solvedAt - challenge.createdAt,
+        } : null,
+        averageSolveTime: solves.length > 0 ? 
+          solves.reduce((sum, solve) => sum + (solve.solvedAt - challenge.createdAt), 0) / solves.length : 0,
+      },
+    };
+  },
+});
+
+// ==================== TOKEN/POINTS MANAGEMENT ====================
+
+export const getUserPointsBreakdown = query({
+  args: { publicKey: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), args.publicKey))
+      .first();
+
+    if (!user) return null;
+
+    // Get points from solving challenges
+    const solves = await ctx.db
+      .query("solves")
+      .filter((q) => q.eq(q.field("userPublicKey"), args.publicKey))
+      .collect();
+
+    const pointsFromSolving = solves.reduce((sum, solve) => sum + solve.pointsEarned, 0);
+
+    // Get points from creating challenges (500 each)
+    const challenges = await ctx.db
+      .query("challenges")
+      .filter((q) => q.eq(q.field("creatorPublicKey"), args.publicKey))
+      .collect();
+
+    const pointsFromCreating = challenges.length * 500;
+
+    // Get points received from tips
+    const tipsReceived = await ctx.db
+      .query("tips")
+      .filter((q) => q.eq(q.field("toPublicKey"), args.publicKey))
+      .collect();
+
+    const pointsFromTips = tipsReceived.reduce((sum, tip) => sum + tip.amount, 0);
+
+    // Get points spent on tips
+    const tipsSent = await ctx.db
+      .query("tips")
+      .filter((q) => q.eq(q.field("fromPublicKey"), args.publicKey))
+      .collect();
+
+    const pointsSpentOnTips = tipsSent.reduce((sum, tip) => sum + tip.amount, 0);
+
+    return {
+      user,
+      breakdown: {
+        totalPoints: user.score,
+        pointsFromSolving,
+        pointsFromCreating,
+        pointsFromTips,
+        pointsSpentOnTips,
+        netTips: pointsFromTips - pointsSpentOnTips,
+      },
+      activity: {
+        challengesSolved: solves.length,
+        challengesCreated: challenges.length,
+        tipsReceived: tipsReceived.length,
+        tipsSent: tipsSent.length,
+      },
+    };
+  },
+});
+
+export const getPointsLeaderboard = query({
+  args: {
+    category: v.optional(v.union(v.literal("total"), v.literal("solving"), v.literal("creating"), v.literal("tips"))),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 20;
+    const category = args.category ?? "total";
+
+    const users = await ctx.db.query("users").collect();
+    
+    let leaderboard = [];
+
+    for (const user of users) {
+      let score = 0;
+      
+      if (category === "total") {
+        score = user.score;
+      } else if (category === "solving") {
+        const solves = await ctx.db
+          .query("solves")
+          .filter((q) => q.eq(q.field("userPublicKey"), user.publicKey))
+          .collect();
+        score = solves.reduce((sum, solve) => sum + solve.pointsEarned, 0);
+      } else if (category === "creating") {
+        const challenges = await ctx.db
+          .query("challenges")
+          .filter((q) => q.eq(q.field("creatorPublicKey"), user.publicKey))
+          .collect();
+        score = challenges.length * 500;
+      } else if (category === "tips") {
+        const tipsReceived = await ctx.db
+          .query("tips")
+          .filter((q) => q.eq(q.field("toPublicKey"), user.publicKey))
+          .collect();
+        score = tipsReceived.reduce((sum, tip) => sum + tip.amount, 0);
+      }
+
+      if (score > 0) {
+        leaderboard.push({
+          publicKey: user.publicKey,
+          username: user.username || user.publicKey.slice(0, 8) + "...",
+          score,
+          createdAt: user.createdAt,
+        });
+      }
+    }
+
+    leaderboard.sort((a, b) => b.score - a.score);
+    
+    return leaderboard
+      .slice(0, limit)
+      .map((user, index) => ({
+        ...user,
+        rank: index + 1,
+      }));
+  },
+});
+
+export const getDifficultyStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const challenges = await ctx.db.query("challenges").collect();
+    
+    const stats = {
+      easy: { count: 0, totalSolves: 0, avgPoints: 100 },
+      medium: { count: 0, totalSolves: 0, avgPoints: 300 },
+      hard: { count: 0, totalSolves: 0, avgPoints: 500 },
+    };
+
+    for (const challenge of challenges) {
+      const difficulty = challenge.difficulty || "easy";
+      if (stats[difficulty as keyof typeof stats]) {
+        stats[difficulty as keyof typeof stats].count++;
+        stats[difficulty as keyof typeof stats].totalSolves += challenge.solveCount || 0;
+      }
+    }
+
+    return stats;
+  },
+});
+
 // ==================== COMMENTS ====================
 
 export const addComment = mutation({
@@ -408,6 +683,71 @@ export const getUserComments = query({
 });
 
 // ==================== TIPPING ====================
+
+export const tipWithPoints = mutation({
+  args: {
+    challengeId: v.id("challenges"),
+    fromPublicKey: v.string(),
+    toPublicKey: v.string(),
+    points: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // Validate positive points
+    if (args.points <= 0) {
+      throw new Error("Tip amount must be greater than 0");
+    }
+
+    // Get sender's user data
+    const sender = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), args.fromPublicKey))
+      .first();
+
+    if (!sender) {
+      throw new Error("Sender not found");
+    }
+
+    // Check if sender has enough points
+    if (sender.score < args.points) {
+      throw new Error("Insufficient points to tip");
+    }
+
+    // Get receiver's user data
+    const receiver = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), args.toPublicKey))
+      .first();
+
+    if (!receiver) {
+      throw new Error("Receiver not found");
+    }
+
+    // Deduct points from sender
+    await ctx.db.patch(sender._id, {
+      score: sender.score - args.points,
+    });
+
+    // Add points to receiver
+    await ctx.db.patch(receiver._id, {
+      score: receiver.score + args.points,
+    });
+
+    // Record the tip
+    const tipId = await ctx.db.insert("tips", {
+      challengeId: args.challengeId,
+      fromPublicKey: args.fromPublicKey,
+      toPublicKey: args.toPublicKey,
+      amount: args.points,
+      timestamp: Date.now(),
+    });
+
+    return {
+      tipId,
+      senderNewScore: sender.score - args.points,
+      receiverNewScore: receiver.score + args.points,
+    };
+  },
+});
 
 export const recordTip = mutation({
   args: {
@@ -513,5 +853,63 @@ export const addSampleUsers = mutation({
 
     console.log("Sample users added to leaderboard");
     return { status: "success", message: "Sample users added" };
+  },
+});
+
+export const addSampleChallenges = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const sampleChallenges = [
+      {
+        title: "Basic Buffer Overflow",
+        difficulty: "easy",
+        pointsReward: 100,
+        flagSolution: "FLAG{easy_buffer_overflow_123}",
+        flagDetails: "Find the buffer overflow vulnerability in the given C program",
+        challengeType: "binary exploitation",
+        creatorPublicKey: "Alice123456789",
+      },
+      {
+        title: "RSA Encryption Challenge",
+        difficulty: "medium", 
+        pointsReward: 300,
+        flagSolution: "FLAG{rsa_factorization_456}",
+        flagDetails: "Factor the RSA modulus to decrypt the message",
+        challengeType: "cryptography",
+        creatorPublicKey: "Bob987654321",
+      },
+      {
+        title: "Advanced Web Exploitation",
+        difficulty: "hard",
+        pointsReward: 500,
+        flagSolution: "FLAG{advanced_sqli_xss_789}",
+        flagDetails: "Chain multiple vulnerabilities to achieve RCE",
+        challengeType: "web security",
+        creatorPublicKey: "Charlie111222",
+      },
+    ];
+
+    for (const challenge of sampleChallenges) {
+      const existingChallenge = await ctx.db
+        .query("challenges")
+        .filter((q) => q.eq(q.field("title"), challenge.title))
+        .first();
+
+      if (!existingChallenge) {
+        await ctx.db.insert("challenges", {
+          ...challenge,
+          prizeAmount: 0,
+          startDate: new Date().toISOString(),
+          endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
+          challengePDA: `challenge_${Math.random().toString(36).substr(2, 9)}`,
+          flagHash: `hash_${Math.random().toString(36).substr(2, 16)}`,
+          solveCount: Math.floor(Math.random() * 50),
+          createdAt: Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000), // Random time in last week
+        });
+      }
+    }
+
+    console.log("Sample challenges added");
+    return { status: "success", message: "Sample challenges added" };
   },
 });
