@@ -5,6 +5,7 @@ import { api } from "../../convex/_generated/api";
 import { useState } from "react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useWallet } from "@solana/wallet-adapter-react";
+import Link from "next/link";
 import "../globals.css";
 
 export default function LeaderboardPage() {
@@ -113,7 +114,12 @@ export default function LeaderboardPage() {
                       {/* Player */}
                       <td className="p-4">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium">{user.username}</span>
+                          <Link 
+                            href={`/profile/${user.publicKey}`}
+                            className="font-medium text-blue-600 hover:text-blue-500 hover:underline transition-colors cursor-pointer"
+                          >
+                            {user.username}
+                          </Link>
                           {isYou && (
                             <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded">
                               You
