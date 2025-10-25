@@ -1,4 +1,6 @@
 use anchor_lang::prelude::*;
+use solana_program::hash::hash;
+
 
 declare_id!("GrTTrdzrLzGnLE1rDbxxv4xdZgQi7pNXGeMpb5TaYecF");
 
@@ -51,20 +53,25 @@ pub mod ctf_anchor {
     
     
 
-    pub fn submit_guess(ctx: Context<SubmitGuess>, guess_hash: [u8; 32]) -> Result<()> {
+    pub fn submit_guess(ctx: Context<SubmitGuess>, guess_plain: String) -> Result<()> {
         let challenge = &mut ctx.accounts.challenge;
-
+    
         if challenge.is_solved {
             return Err(CtfError::AlreadySolved.into());
         }
-
-        if challenge.flag_hash == guess_hash {
+    
+        // Hash the guess using SHA-256
+        let hashed_guess = hash(guess_plain.as_bytes());
+        let guess_bytes = hashed_guess.to_bytes(); // [u8; 32]
+    
+        // Compare to stored flag_hash
+        if challenge.flag_hash == guess_bytes {
             challenge.is_solved = true;
-            msg!("Correct guess! Challenge solved by {}", ctx.accounts.guesser.key());
+            msg!("✅ Correct guess! Challenge solved by {}", ctx.accounts.guesser.key());
         } else {
-            msg!("Incorrect guess.");
+            msg!("❌ Incorrect guess.");
         }
-
+    
         Ok(())
     }
 }
