@@ -5,12 +5,10 @@ import { api } from "@/convex/_generated/api";
 import { useWallet } from "@solana/wallet-adapter-react";
 import bs58 from "bs58";
 import { useCallback, useState } from "react";
-import WalletTest from "./components/WalletTest";
 
 export default function Home() {
   return (
     <main className="min-h-screen p-8 flex flex-col gap-16">
-      <WalletTest />
       <Content />
     </main>
   );

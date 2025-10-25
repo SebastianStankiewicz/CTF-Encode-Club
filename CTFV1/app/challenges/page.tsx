@@ -60,18 +60,16 @@ function Content() {
     }
   }, [connected, publicKey, signMessage, verifyOrCreateUser, setIsSignedIn]);
 
-  // Get challenge status
   const getChallengeStatus = (startDate: string, endDate: string) => {
     const now = new Date();
     const start = new Date(startDate);
     const end = new Date(endDate);
-    
+
     if (now < start) return "upcoming";
     if (now > end) return "ended";
     return "active";
   };
 
-  // Days until end
   const getDaysUntilEnd = (endDate: string) => {
     const now = new Date();
     const end = new Date(endDate);
@@ -80,31 +78,28 @@ function Content() {
     return diffDays;
   };
 
-  // Filter and sort challenges
   const filteredAndSortedChallenges = useMemo(() => {
     if (!challenges) return [];
 
     let filtered = challenges.filter((challenge) => {
-      // Search filter
-      const matchesSearch = challenge.flagDetails?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          challenge._id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          challenge.challengeType?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch =
+        challenge.flagDetails?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        challenge._id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        challenge.challengeType?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      // Status filter
       const status = getChallengeStatus(challenge.startDate, challenge.endDate);
-      const matchesType = filterType === "all" || 
-                         (filterType === "active" && status === "active") ||
-                         (filterType === "upcoming" && status === "upcoming") ||
-                         (filterType === "ended" && status === "ended");
+      const matchesType =
+        filterType === "all" ||
+        (filterType === "active" && status === "active") ||
+        (filterType === "upcoming" && status === "upcoming") ||
+        (filterType === "ended" && status === "ended");
 
-      // Category filter
-      const matchesCategory = filterCategory === "all" || 
-                             challenge.challengeType === filterCategory;
+      const matchesCategory =
+        filterCategory === "all" || challenge.challengeType === filterCategory;
 
       return matchesSearch && matchesType && matchesCategory;
     });
 
-    // Sort challenges
     filtered.sort((a, b) => {
       switch (sortBy) {
         case "newest":
@@ -137,13 +132,13 @@ function Content() {
         <p className="text-foreground/70 text-lg">
           Solve capture-the-flag challenges and earn SOL prizes
         </p>
-        
+
         {!isSignedIn && (
           <div className="flex items-center gap-4 mt-6 p-4 bg-foreground/5 border border-foreground/10 rounded-lg">
             <button
               onClick={handleSignIn}
               disabled={!connected || isSigningIn}
-              className="px-6 py-3 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition disabled:opacity-50 font-medium"
+              className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:opacity-50 font-medium"
             >
               {isSigningIn ? "Signing In..." : "Sign In to Participate"}
             </button>
@@ -154,10 +149,9 @@ function Content() {
         )}
       </div>
 
-      {/* Filters and Search */}
+      {/* Filters */}
       <div className="mb-8 p-6 bg-foreground/5 border border-foreground/10 rounded-lg">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Search */}
           <div>
             <label className="block text-sm font-medium text-foreground/80 mb-2">
               Search Challenges
@@ -167,11 +161,10 @@ function Content() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search by description or ID..."
-              className="w-full p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+              className="w-full p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
             />
           </div>
 
-          {/* Filter by Status */}
           <div>
             <label className="block text-sm font-medium text-foreground/80 mb-2">
               Filter by Status
@@ -179,7 +172,7 @@ function Content() {
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="w-full p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+              className="w-full p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -188,7 +181,6 @@ function Content() {
             </select>
           </div>
 
-          {/* Filter by Category */}
           <div>
             <label className="block text-sm font-medium text-foreground/80 mb-2">
               Filter by Category
@@ -196,7 +188,7 @@ function Content() {
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
-              className="w-full p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+              className="w-full p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
             >
               <option value="all">All Categories</option>
               <option value="web">Web</option>
@@ -208,7 +200,6 @@ function Content() {
             </select>
           </div>
 
-          {/* Sort */}
           <div>
             <label className="block text-sm font-medium text-foreground/80 mb-2">
               Sort by
@@ -216,7 +207,7 @@ function Content() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="w-full p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+              className="w-full p-3 rounded-md border border-foreground/20 bg-background/50 text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
             >
               <option value="newest">Newest First</option>
               <option value="oldest">Oldest First</option>
@@ -228,31 +219,30 @@ function Content() {
         </div>
       </div>
 
-      {/* Results Count */}
       {challenges && (
         <div className="mb-6 text-sm text-foreground/60">
           Showing {filteredAndSortedChallenges.length} of {challenges.length} challenges
         </div>
       )}
 
-      {/* Challenges Grid */}
+      {/* Challenge Grid */}
       {challenges === undefined ? (
         <div className="text-center py-16">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-foreground/60">Loading challenges...</p>
         </div>
       ) : filteredAndSortedChallenges.length === 0 ? (
         <div className="text-center py-16 border border-foreground/10 bg-foreground/5 rounded-lg">
           <h3 className="text-xl font-semibold mb-2">No Challenges Found</h3>
           <p className="text-foreground/60 mb-6">
-            {challenges.length === 0 
-              ? "There are currently no challenges available." 
+            {challenges.length === 0
+              ? "There are currently no challenges available."
               : "No challenges match your current filters."}
           </p>
           {challenges.length === 0 && (
             <Link
               href="/create"
-              className="inline-block px-6 py-3 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition font-medium"
+              className="inline-block px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition font-medium"
             >
               Create the First Challenge
             </Link>
@@ -262,9 +252,8 @@ function Content() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredAndSortedChallenges.map((challenge) => {
             const status = getChallengeStatus(challenge.startDate, challenge.endDate);
-            const isActive = status === "active";
             const daysUntilEnd = getDaysUntilEnd(challenge.endDate);
-            
+
             return (
               <Link
                 key={challenge._id}
@@ -273,63 +262,63 @@ function Content() {
               >
                 <div
                   className={`h-full border rounded-lg p-6 transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-pointer ${
-                    isActive
-                      ? "border-green-500/50 bg-green-50/5 hover:border-green-500"
+                    status === "active"
+                      ? "border-blue-500/50 bg-blue-50/5 hover:border-blue-500"
                       : status === "upcoming"
-                      ? "border-yellow-500/50 bg-yellow-50/5 hover:border-yellow-500"
-                      : "border-red-500/50 bg-red-50/5 hover:border-red-500"
+                      ? "border-blue-300/50 bg-blue-50/5 hover:border-blue-400"
+                      : "border-blue-900/50 bg-blue-50/5 hover:border-blue-700"
                   }`}
                 >
-                  {/* Challenge Header */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span
                         className={`px-2 py-1 text-xs font-semibold rounded-full ${
                           status === "active"
-                            ? "bg-green-100 text-green-800"
+                            ? "bg-blue-100 text-blue-800"
                             : status === "upcoming"
-                            ? "bg-yellow-100 text-yellow-800"
-                            : "bg-red-100 text-red-800"
+                            ? "bg-blue-200 text-blue-900"
+                            : "bg-blue-950 text-blue-100"
                         }`}
                       >
                         {status.toUpperCase()}
                       </span>
-                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-50 text-blue-800 border border-blue-200">
                         {challenge.challengeType?.toUpperCase() || "MISC"}
                       </span>
-                      {isActive && daysUntilEnd <= 3 && (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
+                      {status === "active" && daysUntilEnd <= 3 && (
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
                           {daysUntilEnd}d left
                         </span>
                       )}
                     </div>
                     <div className="text-right">
-                      <div className="text-xl font-bold text-purple-600">
+                      <div className="text-xl font-bold text-blue-600">
                         {challenge.prizeAmount}
                       </div>
                       <div className="text-xs text-foreground/60">SOL</div>
                     </div>
                   </div>
 
-                  {/* Challenge Title */}
-                  <h3 className="text-lg font-semibold font-mono mb-3 group-hover:text-purple-600 transition-colors">
+                  <h3 className="text-lg font-semibold font-mono mb-3 group-hover:text-blue-600 transition-colors">
                     Challenge #{challenge._id.slice(-6)}
                   </h3>
 
-                  {/* Challenge Description */}
                   <p className="text-foreground/80 text-sm mb-4 line-clamp-3">
                     {challenge.flagDetails || "No description available"}
                   </p>
 
-                  {/* Challenge Details */}
                   <div className="space-y-2 text-xs text-foreground/60 mb-4">
                     <div className="flex justify-between">
                       <span>Start:</span>
-                      <span className="font-mono">{new Date(challenge.startDate).toLocaleDateString()}</span>
+                      <span className="font-mono">
+                        {new Date(challenge.startDate).toLocaleDateString()}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span>End:</span>
-                      <span className="font-mono">{new Date(challenge.endDate).toLocaleDateString()}</span>
+                      <span className="font-mono">
+                        {new Date(challenge.endDate).toLocaleDateString()}
+                      </span>
                     </div>
                     {challenge.files && challenge.files.length > 0 && (
                       <div className="flex justify-between">
@@ -339,24 +328,9 @@ function Content() {
                     )}
                   </div>
 
-                  {/* Action Indicator */}
                   <div className="flex items-center justify-between pt-4 border-t border-foreground/10">
                     <div className="text-xs text-foreground/50 font-mono">
                       {new Date(challenge._creationTime).toLocaleDateString()}
-                    </div>
-                    
-                    <div className={`text-sm font-medium ${
-                      isActive && isSignedIn
-                        ? "text-purple-600 group-hover:text-purple-700"
-                        : "text-foreground/60"
-                    }`}>
-                      {!isSignedIn
-                        ? "Sign in to view"
-                        : isActive
-                        ? "View challenge →"
-                        : status === "upcoming"
-                        ? "Coming soon"
-                        : "Challenge ended"}
                     </div>
                   </div>
                 </div>
@@ -366,7 +340,6 @@ function Content() {
         </div>
       )}
 
-      {/* Create Challenge CTA */}
       {isSignedIn && challenges && challenges.length > 0 && (
         <div className="mt-12 text-center py-8 border border-foreground/10 bg-foreground/5 rounded-lg">
           <h3 className="text-lg font-semibold mb-2">Want to create your own challenge?</h3>
@@ -375,7 +348,7 @@ function Content() {
           </p>
           <Link
             href="/create"
-            className="inline-block px-6 py-3 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition font-medium"
+            className="inline-block px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition font-medium"
           >
             Create New Challenge
           </Link>

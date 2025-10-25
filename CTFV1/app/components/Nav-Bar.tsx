@@ -33,7 +33,6 @@ export default function Navbar() {
       publicKey: publicKey?.toBase58(),
       walletName: wallet?.adapter?.name,
       isSignedIn,
-      ready: wallet?.adapter?.ready,
       readyState: wallet?.adapter?.readyState,
     });
   }, [connected, connecting, publicKey, wallet, isSignedIn]);
@@ -153,8 +152,8 @@ export default function Navbar() {
   const navItems = [
     { href: "/challenges", label: "Challenges" },
     { href: "/leaderboard", label: "Leaderboard" },
-    { href: "/submit", label: "Submit Flag" },
     { href: "/create", label: "Create Challenge" },
+    { href: "/educate", label: "Learn" },
   ];
 
   const linkClasses = (active: boolean) =>
@@ -208,22 +207,19 @@ export default function Navbar() {
           {/* Wallet / Sign-in */}
           <div className="border-t border-foreground/10 p-4">
             {!connected ? (
-              <div className="space-y-2">
-                <WalletMultiButton
-                  className="w-full rounded-md bg-gray-600 px-4 py-1 text-xs text-white hover:bg-gray-700"
-                  style={{ fontSize: "12px", height: "32px" }}
-                />
+              <div className="space-y-3">
+                <WalletMultiButton className="!w-full !bg-blue-600 hover:!bg-blue-700 !rounded-lg !px-4 !py-3 !text-sm !font-medium !text-white !transition-all" />
                 {connecting && (
-                  <div className="space-y-1">
+                  <div className="space-y-2 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
                     <p className="text-xs font-mono text-orange-400">
-                      Connecting to wallet...
+                      🔄 Connecting to wallet...
                     </p>
-                    <p className="text-xs font-mono text-foreground/50">
+                    <p className="text-xs font-mono text-foreground/60">
                       Check Phantom for approval popup
                     </p>
                     <button
                       onClick={handleForceDisconnect}
-                      className="text-xs underline text-red-400 hover:text-red-300"
+                      className="text-xs font-medium text-red-400 hover:text-red-300 underline"
                     >
                       Cancel & Reset
                     </button>
@@ -231,40 +227,48 @@ export default function Navbar() {
                 )}
               </div>
             ) : !isSignedIn ? (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-mono text-foreground/70">
-                    {publicKey?.toBase58().slice(0, 4)}…
-                    {publicKey?.toBase58().slice(-4)}
-                  </span>
-                  <button
-                    onClick={disconnect}
-                    className="text-xs px-2 py-1 rounded border border-foreground/20 hover:bg-foreground/10"
-                  >
-                    Disconnect
-                  </button>
+              <div className="space-y-3">
+                <div className="p-3 bg-foreground/5 border border-foreground/10 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-foreground/60">Connected</span>
+                    <button
+                      onClick={disconnect}
+                      className="text-xs px-2 py-1 rounded bg-foreground/5 border border-foreground/10 hover:bg-foreground/10 transition font-medium text-foreground/70"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                  <div className="text-sm font-mono text-foreground">
+                    {publicKey?.toBase58().slice(0, 6)}...
+                    {publicKey?.toBase58().slice(-6)}
+                  </div>
                 </div>
 
                 <button
                   onClick={handleSignIn}
                   disabled={isSigning}
-                  className="w-full rounded-md bg-gray-600 px-4 py-1 text-xs text-white hover:bg-gray-700 disabled:opacity-50"
+                  className="w-full bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-3 text-sm font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSigning ? "Signing…" : "Sign In"}
+                  {isSigning ? "Signing In..." : "Sign In"}
                 </button>
               </div>
             ) : (
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-mono text-foreground/70">
-                  {publicKey?.toBase58().slice(0, 4)}…
-                  {publicKey?.toBase58().slice(-4)}
-                </span>
-                <button
-                  onClick={disconnect}
-                  className="text-xs px-2 py-1 rounded border border-foreground/20 hover:bg-foreground/10"
-                >
-                  Disconnect
-                </button>
+              <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-green-400 flex items-center gap-1">
+                    <span>✓</span> Signed In
+                  </span>
+                  <button
+                    onClick={disconnect}
+                    className="text-xs px-2 py-1 rounded bg-foreground/5 border border-foreground/10 hover:bg-foreground/10 transition font-medium text-foreground/70"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+                <div className="text-sm font-mono text-foreground">
+                  {publicKey?.toBase58().slice(0, 6)}...
+                  {publicKey?.toBase58().slice(-6)}
+                </div>
               </div>
             )}
           </div>
@@ -284,9 +288,9 @@ export default function Navbar() {
 
           <button
             onClick={() => setMobileOpen((o) => !o)}
-            className="p-2 rounded-lg text-foreground/60 hover:bg-foreground/10"
+            className="p-2 rounded-lg text-foreground/60 hover:bg-foreground/10 font-medium"
           >
-            {mobileOpen ? "Close" : "Menu"}
+            {mobileOpen ? "✕" : "☰"}
           </button>
         </div>
       </header>
@@ -318,22 +322,19 @@ export default function Navbar() {
 
             <div className="border-t border-foreground/10 pt-4 mt-4">
               {!connected ? (
-                <div className="space-y-2">
-                  <WalletMultiButton
-                    className="w-full rounded-md bg-gray-600 px-4 py-1 text-xs text-white hover:bg-gray-700"
-                    style={{ fontSize: "12px", height: "32px" }}
-                  />
+                <div className="space-y-3">
+                  <WalletMultiButton className="!w-full !bg-blue-600 hover:!bg-blue-700 !rounded-lg !px-4 !py-3 !text-sm !font-medium !text-white !transition-all" />
                   {connecting && (
-                    <div className="space-y-1">
+                    <div className="space-y-2 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
                       <p className="text-xs font-mono text-orange-400">
-                        Connecting to wallet...
+                        🔄 Connecting to wallet...
                       </p>
-                      <p className="text-xs font-mono text-foreground/50">
+                      <p className="text-xs font-mono text-foreground/60">
                         Check Phantom for approval popup
                       </p>
                       <button
                         onClick={handleForceDisconnect}
-                        className="text-xs underline text-red-400 hover:text-red-300"
+                        className="text-xs font-medium text-red-400 hover:text-red-300 underline"
                       >
                         Cancel & Reset
                       </button>
@@ -341,40 +342,48 @@ export default function Navbar() {
                   )}
                 </div>
               ) : !isSignedIn ? (
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-mono text-foreground/70">
-                      {publicKey?.toBase58().slice(0, 4)}…
-                      {publicKey?.toBase58().slice(-4)}
-                    </span>
-                    <button
-                      onClick={disconnect}
-                      className="text-xs px-2 py-1 rounded border border-foreground/20 hover:bg-foreground/10"
-                    >
-                      Disconnect
-                    </button>
+                <div className="space-y-3">
+                  <div className="p-3 bg-foreground/5 border border-foreground/10 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-foreground/60">Connected</span>
+                      <button
+                        onClick={disconnect}
+                        className="text-xs px-2 py-1 rounded bg-foreground/5 border border-foreground/10 hover:bg-foreground/10 transition font-medium text-foreground/70"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                    <div className="text-sm font-mono text-foreground">
+                      {publicKey?.toBase58().slice(0, 6)}...
+                      {publicKey?.toBase58().slice(-6)}
+                    </div>
                   </div>
 
                   <button
                     onClick={handleSignIn}
                     disabled={isSigning}
-                    className="w-full rounded-md bg-gray-600 px-4 py-1 text-xs text-white hover:bg-gray-700 disabled:opacity-50"
+                    className="w-full bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-3 text-sm font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isSigning ? "Signing…" : "Sign In"}
+                    {isSigning ? "Signing In..." : "Sign In"}
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-mono text-foreground/70">
-                    {publicKey?.toBase58().slice(0, 4)}…
-                    {publicKey?.toBase58().slice(-4)}
-                  </span>
-                  <button
-                    onClick={disconnect}
-                    className="text-xs px-2 py-1 rounded border border-foreground/20 hover:bg-foreground/10"
-                  >
-                    Disconnect
-                  </button>
+                <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-green-400 flex items-center gap-1">
+                      <span>✓</span> Signed In
+                    </span>
+                    <button
+                      onClick={disconnect}
+                      className="text-xs px-2 py-1 rounded bg-foreground/5 border border-foreground/10 hover:bg-foreground/10 transition font-medium text-foreground/70"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                  <div className="text-sm font-mono text-foreground">
+                    {publicKey?.toBase58().slice(0, 6)}...
+                    {publicKey?.toBase58().slice(-6)}
+                  </div>
                 </div>
               )}
             </div>

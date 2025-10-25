@@ -2,23 +2,15 @@ import { v } from "convex/values";
 import { query, mutation, action } from "./_generated/server";
 import { api } from "./_generated/api";
 
-// Write your Convex functions in any file inside this directory (`convex`).
-// See https://docs.convex.dev/functions for more.
+// ==================== EXAMPLE FUNCTIONS ====================
 
-// You can read data from the database via a query:
 export const listNumbers = query({
-  // Validators for arguments.
   args: {
     count: v.number(),
   },
-
-  // Query implementation.
   handler: async (ctx, args) => {
-    //// Read the database as many times as you need here.
-    //// See https://docs.convex.dev/database/reading-data.
     const numbers = await ctx.db
       .query("numbers")
-      // Ordered by _creationTime, return most recent
       .order("desc")
       .take(args.count);
     return {
@@ -28,59 +20,39 @@ export const listNumbers = query({
   },
 });
 
-// You can write data to the database via a mutation:
 export const addNumber = mutation({
-  // Validators for arguments.
   args: {
     value: v.number(),
   },
-
-  // Mutation implementation.
   handler: async (ctx, args) => {
-    //// Insert or modify documents in the database here.
-    //// Mutations can also read from the database like queries.
-    //// See https://docs.convex.dev/database/writing-data.
-
     const id = await ctx.db.insert("numbers", { value: args.value });
-
     console.log("Added new document with id:", id);
-    // Optionally, return a value from your mutation.
-    // return id;
+    return id;
   },
 });
 
-// You can fetch data from and send data to third-party APIs via an action:
 export const myAction = action({
-  // Validators for arguments.
   args: {
     first: v.number(),
     second: v.string(),
   },
-
-  // Action implementation.
   handler: async (ctx, args) => {
-    //// Use the browser-like `fetch` API to send HTTP requests.
-    //// See https://docs.convex.dev/functions/actions#calling-third-party-apis-and-using-npm-packages.
-    // const response = await ctx.fetch("https://api.thirdpartyservice.com");
-    // const data = await response.json();
-
-    //// Query data by running Convex queries.
     const data = await ctx.runQuery(api.myFunctions.listNumbers, {
       count: 10,
     });
     console.log(data);
 
-    //// Write data by running Convex mutations.
     await ctx.runMutation(api.myFunctions.addNumber, {
       value: args.first,
     });
   },
 });
 
+// ==================== CHALLENGES ====================
 
 export const addChallenge = mutation({
-  // Validators for arguments.
   args: {
+    title: v.string(),
     flagSolution: v.string(),
     prizeAmount: v.number(),
     startDate: v.string(),
@@ -92,15 +64,11 @@ export const addChallenge = mutation({
     hint: v.optional(v.string()),
     hintReleaseDate: v.optional(v.string()),
     keepAfterFirstSolve: v.optional(v.boolean()),
+    creatorPublicKey: v.optional(v.string()),
   },
-
-  // Mutation implementation.
   handler: async (ctx, args) => {
-    //// Insert or modify documents in the database here.
-    //// Mutations can also read from the database like queries.
-    //// See https://docs.convex.dev/database/writing-data.
-
     const id = await ctx.db.insert("challenges", {
+      title: args.title,
       flagSolution: args.flagSolution,
       prizeAmount: args.prizeAmount,
       startDate: args.startDate,
@@ -112,64 +80,26 @@ export const addChallenge = mutation({
       hint: args.hint,
       hintReleaseDate: args.hintReleaseDate,
       keepAfterFirstSolve: args.keepAfterFirstSolve ?? true,
+      creatorPublicKey: args.creatorPublicKey,
     });
 
     console.log("Added new challenge with id:", id);
-    // Optionally, return a value from your mutation.
-    // return id;
+    return { challengeId: id };
   },
 });
-
-
-export const verifyOrCreateUser = mutation({
-  // Validators for arguments.
-  args: {
-    publicKey: v.string(),
-    username: v.optional(v.string()),
-  },
-
-  // Mutation implementation.
-  handler: async (ctx, args) => {
-    //// Check if user already exists in "users" table.
-    const existingUser = await ctx.db
-      .query("users")
-      .filter((q) => q.eq(q.field("publicKey"), args.publicKey))
-      .first();
-
-    if (existingUser) {
-      console.log("User already exists:", existingUser.publicKey);
-      return { status: "logged_in", user: existingUser };
-    }
-
-    //// If not, create a new user.
-    const newUserId = await ctx.db.insert("users", {
-      publicKey: args.publicKey,
-      username: args.username || `User_${args.publicKey.slice(0, 8)}`,
-      createdAt: new Date().toISOString(),
-      score: 0,
-    });
-
-    console.log("Created new user with id:", newUserId);
-
-    return { status: "created", userId: newUserId };
-  },
-});
-
 
 export const getChallengeBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
     const challenge = await ctx.db
       .query("challenges")
-      .filter(q => q.eq(q.field("_id"), args.slug))
+      .filter((q) => q.eq(q.field("_id"), args.slug))
       .first();
 
-    if (!challenge) return null;
-    return challenge;
+    return challenge ?? null;
   },
 });
 
-// Get all challenges
 export const getAllChallenges = query({
   args: {
     limit: v.optional(v.number()),
@@ -182,38 +112,139 @@ export const getAllChallenges = query({
       .order("desc")
       .take(limit);
 
-    return challenges.map(challenge => ({
-      _id: challenge._id,
-      flagSolution: challenge.flagSolution,
-      prizeAmount: challenge.prizeAmount,
-      startDate: challenge.startDate,
-      endDate: challenge.endDate,
-      flagDetails: challenge.flagDetails,
-      files: challenge.files || [],
-      challengeType: challenge.challengeType || "misc",
-      flagFormat: challenge.flagFormat,
-      hint: challenge.hint,
-      hintReleaseDate: challenge.hintReleaseDate,
-      keepAfterFirstSolve: challenge.keepAfterFirstSolve ?? true,
-      _creationTime: challenge._creationTime,
-    }));
+    return challenges;
+  },
+});
+
+// ==================== USERS ====================
+
+export const verifyOrCreateUser = mutation({
+  args: {
+    publicKey: v.string(),
+    username: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existingUser = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), args.publicKey))
+      .first();
+
+    if (existingUser) {
+      console.log("User already exists:", existingUser.publicKey);
+      return { status: "logged_in" as const, user: existingUser };
+    }
+
+    const newUserId = await ctx.db.insert("users", {
+      publicKey: args.publicKey,
+      username: args.username || `User_${args.publicKey.slice(0, 8)}`,
+      createdAt: new Date().toISOString(),
+      score: 0,
+    });
+
+    console.log("Created new user with id:", newUserId);
+    return { status: "created" as const, userId: newUserId };
+  },
+});
+
+export const updateUserProfile = mutation({
+  args: {
+    publicKey: v.string(),
+    username: v.optional(v.string()),
+    bio: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), args.publicKey))
+      .first();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const updates: any = {};
+    
+    if (args.username !== undefined) {
+      updates.username = args.username;
+    }
+    
+    if (args.bio !== undefined) {
+      updates.bio = args.bio;
+    }
+
+    await ctx.db.patch(user._id, updates);
+
+    console.log(`Updated profile for ${args.publicKey}`);
+    return { success: true };
   },
 });
 
 export const getUserByPublicKey = query({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
-    const challenge = await ctx.db
+    const user = await ctx.db
       .query("users")
-      .filter(q => q.eq(q.field("publicKey"), args.slug))
+      .filter((q) => q.eq(q.field("publicKey"), args.slug))
       .first();
 
-    if (!challenge) return null;
-    return challenge;
+    return user ?? null;
   },
 });
 
-// Get leaderboard data
+export const getUserStats = query({
+  args: { publicKey: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), args.publicKey))
+      .first();
+
+    if (!user) return null;
+
+    const allUsers = await ctx.db.query("users").collect();
+
+    const sortedUsers = allUsers
+      .filter((u) => u.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    const userRank = sortedUsers.findIndex((u) => u._id === user._id) + 1;
+
+    return {
+      ...user,
+      rank: userRank > 0 ? userRank : null,
+      totalUsers: sortedUsers.length,
+    };
+  },
+});
+
+export const updateUserScore = mutation({
+  args: {
+    publicKey: v.string(),
+    points: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), args.publicKey))
+      .first();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const newScore = user.score + args.points;
+
+    await ctx.db.patch(user._id, {
+      score: newScore,
+    });
+
+    console.log(`Updated user ${args.publicKey} score by ${args.points} points`);
+    return { newScore };
+  },
+});
+
+// ==================== LEADERBOARD ====================
+
 export const getLeaderboard = query({
   args: {
     limit: v.optional(v.number()),
@@ -226,9 +257,8 @@ export const getLeaderboard = query({
       .order("desc")
       .take(limit);
 
-    // Sort by score in descending order
     const sortedUsers = users
-      .filter(user => user.score > 0) // Only show users with points
+      .filter((user) => user.score > 0)
       .sort((a, b) => b.score - a.score)
       .map((user, index) => ({
         rank: index + 1,
@@ -242,62 +272,159 @@ export const getLeaderboard = query({
   },
 });
 
-// Update user score (for when they solve challenges)
-export const updateUserScore = mutation({
+// ==================== COMMENTS ====================
+
+export const addComment = mutation({
   args: {
+    challengeId: v.id("challenges"),
     publicKey: v.string(),
-    points: v.number(),
+    text: v.string(),
   },
   handler: async (ctx, args) => {
+    const challenge = await ctx.db.get(args.challengeId);
+    if (!challenge) {
+      throw new Error("Challenge not found");
+    }
+
     const user = await ctx.db
       .query("users")
-      .filter(q => q.eq(q.field("publicKey"), args.publicKey))
+      .filter((q) => q.eq(q.field("publicKey"), args.publicKey))
       .first();
 
     if (!user) {
-      throw new Error("User not found");
+      throw new Error("User not found. Please sign in first.");
     }
 
-    await ctx.db.patch(user._id, {
-      score: user.score + args.points,
+    const commentId = await ctx.db.insert("comments", {
+      challengeId: args.challengeId,
+      publicKey: args.publicKey,
+      text: args.text,
+      createdAt: Date.now(),
     });
 
-    console.log(`Updated user ${args.publicKey} score by ${args.points} points`);
-    return { newScore: user.score + args.points };
+    console.log(`Comment added by ${args.publicKey} on challenge ${args.challengeId}`);
+    return { commentId };
   },
 });
 
-// Get user stats
-export const getUserStats = query({
-  args: { publicKey: v.string() },
+export const getChallengeComments = query({
+  args: {
+    challengeId: v.id("challenges"),
+  },
   handler: async (ctx, args) => {
-    const user = await ctx.db
-      .query("users")
-      .filter(q => q.eq(q.field("publicKey"), args.publicKey))
-      .first();
-
-    if (!user) return null;
-
-    // Get all users to calculate rank
-    const allUsers = await ctx.db
-      .query("users")
+    const comments = await ctx.db
+      .query("comments")
+      .filter((q) => q.eq(q.field("challengeId"), args.challengeId))
+      .order("desc")
       .collect();
 
-    const sortedUsers = allUsers
-      .filter(u => u.score > 0)
-      .sort((a, b) => b.score - a.score);
-
-    const userRank = sortedUsers.findIndex(u => u._id === user._id) + 1;
-
-    return {
-      ...user,
-      rank: userRank > 0 ? userRank : null,
-      totalUsers: sortedUsers.length,
-    };
+    return comments;
   },
 });
 
-// Test function to add sample leaderboard data
+export const getUserComments = query({
+  args: {
+    publicKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const comments = await ctx.db
+      .query("comments")
+      .filter((q) => q.eq(q.field("publicKey"), args.publicKey))
+      .order("desc")
+      .collect();
+
+    return comments;
+  },
+});
+
+// ==================== TIPPING ====================
+
+export const recordTip = mutation({
+  args: {
+    challengeId: v.id("challenges"),
+    fromPublicKey: v.string(),
+    toPublicKey: v.string(),
+    amount: v.number(),
+    signature: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const challenge = await ctx.db.get(args.challengeId);
+    if (!challenge) {
+      throw new Error("Challenge not found");
+    }
+
+    const sender = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), args.fromPublicKey))
+      .first();
+
+    if (!sender) {
+      throw new Error("Sender not found");
+    }
+
+    const tipId = await ctx.db.insert("tips", {
+      challengeId: args.challengeId,
+      fromPublicKey: args.fromPublicKey,
+      toPublicKey: args.toPublicKey,
+      amount: args.amount,
+      signature: args.signature,
+      createdAt: Date.now(),
+    });
+
+    console.log(`Tip recorded: ${args.amount} SOL from ${args.fromPublicKey} to ${args.toPublicKey}`);
+    return { tipId, signature: args.signature };
+  },
+});
+
+export const getChallengeTips = query({
+  args: {
+    challengeId: v.id("challenges"),
+  },
+  handler: async (ctx, args) => {
+    const tips = await ctx.db
+      .query("tips")
+      .filter((q) => q.eq(q.field("challengeId"), args.challengeId))
+      .collect();
+    
+    const totalTips = tips.reduce((sum, tip) => sum + tip.amount, 0);
+    return { tips, totalTips, count: tips.length };
+  },
+});
+
+export const getTipsBySender = query({
+  args: {
+    publicKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const tips = await ctx.db
+      .query("tips")
+      .filter((q) => q.eq(q.field("fromPublicKey"), args.publicKey))
+      .order("desc")
+      .collect();
+    
+    const totalSent = tips.reduce((sum, tip) => sum + tip.amount, 0);
+    return { tips, totalSent, count: tips.length };
+  },
+});
+
+export const getTipsByReceiver = query({
+  args: {
+    publicKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const tips = await ctx.db
+      .query("tips")
+      .filter((q) => q.eq(q.field("toPublicKey"), args.publicKey))
+      .order("desc")
+      .collect();
+    
+    const totalReceived = tips.reduce((sum, tip) => sum + tip.amount, 0);
+    return { tips, totalReceived, count: tips.length };
+  },
+});
+
+// ==================== TEST DATA ====================
+
 export const addSampleUsers = mutation({
   args: {},
   handler: async (ctx) => {
@@ -313,10 +440,9 @@ export const addSampleUsers = mutation({
     ];
 
     for (const user of sampleUsers) {
-      // Check if user already exists
       const existingUser = await ctx.db
         .query("users")
-        .filter(q => q.eq(q.field("publicKey"), user.publicKey))
+        .filter((q) => q.eq(q.field("publicKey"), user.publicKey))
         .first();
 
       if (!existingUser) {
