@@ -1,15 +1,49 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { useParams } from "next/navigation";
-import { useWallet, useConnection } from "@solana/wallet-adapter-react";
-import { useAuth } from "@/app/providers/auth-context";
 import { useState, useCallback } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useConnection } from "@solana/wallet-adapter-react";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import { useAuth } from "@/app/providers/auth-context";
 import bs58 from "bs58";
-import * as web3 from "@solana/web3.js";
 import { SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import * as web3 from "@solana/web3.js";
+import "../../globals.css";
+
+// File Download Component - MUST be outside ChallengePage
+const FileDownloadLink = ({ storageId, fileName, index }: { storageId: string; fileName?: string; index: number }) => {
+  const fileUrl = useQuery(api.myFunctions.getFileUrl, { storageId });
+  
+  if (!fileUrl) {
+    return (
+      <div className="p-3 bg-foreground/5 border border-foreground/10 rounded-lg">
+        <div className="flex items-center gap-2 text-foreground/60">
+          <span className="animate-spin">⏳</span>
+          <span>Loading file...</span>
+        </div>
+      </div>
+    );
+  }
+  
+  const displayName = fileName || `File ${index + 1}`;
+  
+  return (
+    <a
+      href={fileUrl}
+      download={displayName}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block p-3 bg-foreground/5 border border-foreground/10 text-blue-400 rounded-lg hover:bg-foreground/10 transition font-medium flex items-center gap-2"
+    >
+      <span>📎</span>
+      <span>{displayName}</span>
+      <span className="ml-auto text-xs text-foreground/40">Download</span>
+    </a>
+  );
+};
 
 export default function ChallengePage() {
   const params = useParams();
@@ -355,20 +389,24 @@ export default function ChallengePage() {
                 </div>
               )}
 
+              {/* Updated Files Section */}
               {challenge.files && challenge.files.length > 0 && (
                 <div className="mt-6">
-                  <h3 className="text-lg font-semibold mb-3">Challenge Files</h3>
+                  <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <span>📁</span>
+                    <span>Challenge Files</span>
+                    <span className="text-sm text-foreground/60 font-normal">
+                      ({challenge.files.length})
+                    </span>
+                  </h3>
                   <div className="space-y-2">
-                    {challenge.files.map((file: string, index: number) => (
-                      <a
+                    {challenge.files.map((storageId: string, index: number) => (
+                      <FileDownloadLink
                         key={index}
-                        href={file}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block p-3 bg-foreground/5 border border-foreground/10 text-blue-400 rounded-lg hover:bg-foreground/10 transition font-medium"
-                      >
-                        Download File {index + 1}
-                      </a>
+                        storageId={storageId}
+                        fileName={challenge.fileNames?.[index]}
+                        index={index}
+                      />
                     ))}
                   </div>
                 </div>

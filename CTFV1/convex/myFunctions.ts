@@ -48,6 +48,19 @@ export const myAction = action({
   },
 });
 
+// ==================== FILE STORAGE ====================
+
+export const generateUploadUrl = mutation(async (ctx) => {
+  return await ctx.storage.generateUploadUrl();
+});
+
+export const getFileUrl = query({
+  args: { storageId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.storageId);
+  },
+});
+
 // ==================== CHALLENGES ====================
 
 export const addChallenge = mutation({
@@ -57,34 +70,24 @@ export const addChallenge = mutation({
     prizeAmount: v.number(),
     startDate: v.string(),
     endDate: v.string(),
-    files: v.optional(v.array(v.string())),
     flagDetails: v.string(),
+    files: v.optional(v.array(v.string())),
     challengeType: v.optional(v.string()),
     flagFormat: v.optional(v.string()),
     hint: v.optional(v.string()),
     hintReleaseDate: v.optional(v.string()),
-    keepAfterFirstSolve: v.optional(v.boolean()),
-    creatorPublicKey: v.optional(v.string()),
+    fileNames: v.optional(v.array(v.string())),
+    creatorPublicKey: v.string(),
   },
   handler: async (ctx, args) => {
-    const id = await ctx.db.insert("challenges", {
-      title: args.title,
-      flagSolution: args.flagSolution,
-      prizeAmount: args.prizeAmount,
-      startDate: args.startDate,
-      endDate: args.endDate,
-      files: args.files ?? [],
-      flagDetails: args.flagDetails,
-      challengeType: args.challengeType ?? "misc",
-      flagFormat: args.flagFormat,
-      hint: args.hint,
-      hintReleaseDate: args.hintReleaseDate,
-      keepAfterFirstSolve: args.keepAfterFirstSolve ?? true,
-      creatorPublicKey: args.creatorPublicKey,
+    const { creatorPublicKey, ...challengeData } = args;
+
+    const challengeId = await ctx.db.insert("challenges", {
+      ...challengeData,
+      creatorPublicKey,
     });
 
-    console.log("Added new challenge with id:", id);
-    return { challengeId: id };
+    return challengeId;
   },
 });
 
@@ -281,33 +284,19 @@ export const addComment = mutation({
     text: v.string(),
   },
   handler: async (ctx, args) => {
-    const challenge = await ctx.db.get(args.challengeId);
-    if (!challenge) {
-      throw new Error("Challenge not found");
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .filter((q) => q.eq(q.field("publicKey"), args.publicKey))
-      .first();
-
-    if (!user) {
-      throw new Error("User not found. Please sign in first.");
-    }
-
+    // Remove auth check, just use the passed publicKey
     const commentId = await ctx.db.insert("comments", {
       challengeId: args.challengeId,
-      publicKey: args.publicKey,
+      userPublicKey: args.publicKey,
       text: args.text,
       createdAt: Date.now(),
     });
 
-    console.log(`Comment added by ${args.publicKey} on challenge ${args.challengeId}`);
-    return { commentId };
+    return commentId;
   },
 });
 
-export const getChallengeComments = query({
+export const getChallengeComments  = query({
   args: {
     challengeId: v.id("challenges"),
   },
@@ -348,31 +337,17 @@ export const recordTip = mutation({
     signature: v.string(),
   },
   handler: async (ctx, args) => {
-    const challenge = await ctx.db.get(args.challengeId);
-    if (!challenge) {
-      throw new Error("Challenge not found");
-    }
-
-    const sender = await ctx.db
-      .query("users")
-      .filter((q) => q.eq(q.field("publicKey"), args.fromPublicKey))
-      .first();
-
-    if (!sender) {
-      throw new Error("Sender not found");
-    }
-
+    // Remove auth check
     const tipId = await ctx.db.insert("tips", {
       challengeId: args.challengeId,
       fromPublicKey: args.fromPublicKey,
       toPublicKey: args.toPublicKey,
       amount: args.amount,
       signature: args.signature,
-      createdAt: Date.now(),
+      timestamp: Date.now(),
     });
 
-    console.log(`Tip recorded: ${args.amount} SOL from ${args.fromPublicKey} to ${args.toPublicKey}`);
-    return { tipId, signature: args.signature };
+    return tipId;
   },
 });
 

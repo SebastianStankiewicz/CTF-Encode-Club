@@ -2,27 +2,19 @@
 
 import { useState, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import bs58 from "bs58";
-import { web3, AnchorProvider, Program, BN } from "@coral-xyz/anchor";
 import { api } from "../../convex/_generated/api";
 import { useMutation } from "convex/react";
-import { verifyOrCreateUser } from "@/convex/myFunctions";
 import { useAuth } from "@/app/providers/auth-context";
-import idl from "@/target/idl/ctf_anchor.json";
-import { CtfAnchor } from "@/target/types/ctf_anchor";
 import "../globals.css";
 
-const PROGRAM_ID = new web3.PublicKey(
-  "GrTTrdzrLzGnLE1rDbxxv4xdZgQi7pNXGeMpb5TaYecF"
-);
-
 export default function Content() {
-  const { publicKey, connected, signMessage } = useWallet();
-  const { isSignedIn, setIsSignedIn } = useAuth();
+  const { publicKey, connected } = useWallet();
+  const { isSignedIn } = useAuth();
   const addChallenge = useMutation(api.myFunctions.addChallenge);
-  const verifyOrCreateUserMutation = useMutation(api.myFunctions.verifyOrCreateUser);
+  const generateUploadUrl = useMutation(api.myFunctions.generateUploadUrl);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
   const [form, setForm] = useState({
     title: "",
     flagSolution: "",
@@ -30,32 +22,65 @@ export default function Content() {
     startDate: "",
     endDate: "",
     flagDetails: "",
-    files: "",
     challengeType: "misc",
     flagFormat: "",
     hint: "",
     hintReleaseDate: "",
   });
 
-  async function computeFlagSha256(flagString: string) {
-    const enc = new TextEncoder();
-    const data = enc.encode(flagString);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    return new Uint8Array(hashBuffer);
-  }
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadedFileIds, setUploadedFileIds] = useState<string[]>([]);
+  const [fileNames, setFileNames] = useState<string[]>([]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = useCallback(async () => {
-    if (!connected || !publicKey) {
-      alert("Connect and sign in first!");
-      return;
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      setSelectedFiles(files);
     }
+  };
 
-    if (!isSignedIn) {
-      alert("Please sign in first!");
+  const uploadFiles = async () => {
+    if (selectedFiles.length === 0) return { fileIds: [], names: [] };
+
+    setUploadingFiles(true);
+    const fileIds: string[] = [];
+    const names: string[] = [];
+
+    try {
+      for (const file of selectedFiles) {
+        // Get upload URL
+        const uploadUrl = await generateUploadUrl();
+
+        // Upload file
+        const result = await fetch(uploadUrl, {
+          method: "POST",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+
+        const { storageId } = await result.json();
+        fileIds.push(storageId);
+        names.push(file.name);
+      }
+
+      setUploadedFileIds(fileIds);
+      setFileNames(names);
+      return { fileIds, names };
+    } catch (err) {
+      console.error("File upload failed:", err);
+      throw new Error("Failed to upload files");
+    } finally {
+      setUploadingFiles(false);
+    }
+  };
+
+  const handleSubmit = useCallback(async () => {
+    if (!connected || !publicKey || !isSignedIn) {
+      alert("Please connect and sign in first!");
       return;
     }
 
@@ -66,6 +91,10 @@ export default function Content() {
 
     setIsSubmitting(true);
     try {
+      // Upload files first
+      const { fileIds, names } = await uploadFiles();
+
+      // Create challenge with file storage IDs and publicKey
       await addChallenge({
         title: form.title,
         flagSolution: form.flagSolution,
@@ -73,11 +102,13 @@ export default function Content() {
         startDate: form.startDate,
         endDate: form.endDate,
         flagDetails: form.flagDetails,
-        files: form.files ? form.files.split(",").map((f) => f.trim()) : [],
+        files: fileIds.length > 0 ? fileIds : undefined,
+        fileNames: names.length > 0 ? names : undefined,
         challengeType: form.challengeType,
         flagFormat: form.flagFormat || undefined,
         hint: form.hint || undefined,
         hintReleaseDate: form.hintReleaseDate || undefined,
+        creatorPublicKey: publicKey.toBase58(), // Add this
       });
 
       alert("Challenge created successfully!");
@@ -88,19 +119,21 @@ export default function Content() {
         startDate: "", 
         endDate: "", 
         flagDetails: "", 
-        files: "",
         challengeType: "misc",
         flagFormat: "",
         hint: "",
         hintReleaseDate: "",
       });
+      setSelectedFiles([]);
+      setUploadedFileIds([]);
+      setFileNames([]);
     } catch (err) {
       console.error("❌ Failed to create challenge:", err);
       alert("Error creating challenge. See console.");
     } finally {
       setIsSubmitting(false);
     }
-  }, [connected, publicKey, isSignedIn, form, addChallenge]);
+  }, [connected, publicKey, isSignedIn, form, selectedFiles, addChallenge, generateUploadUrl]);
 
   return (
     <div className="min-h-screen bg-background text-foreground p-6">
@@ -289,20 +322,31 @@ export default function Content() {
               </p>
             </div>
 
-            {/* Files */}
+            {/* File Upload */}
             <div>
               <label className="block text-sm font-medium text-foreground/60 mb-2">
                 Challenge Files (Optional)
               </label>
               <input
-                name="files"
-                placeholder="https://example.com/file1.zip, https://example.com/file2.txt"
-                value={form.files}
-                onChange={handleChange}
-                className="w-full p-3 rounded-lg bg-foreground/5 border border-foreground/10 text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                type="file"
+                multiple
+                onChange={handleFileSelect}
+                className="w-full p-3 rounded-lg bg-foreground/5 border border-foreground/10 text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 file:cursor-pointer"
               />
+              {selectedFiles.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-sm text-foreground/60">Selected files:</p>
+                  {selectedFiles.map((file, idx) => (
+                    <div key={idx} className="text-sm text-foreground/80 flex items-center gap-2">
+                      <span className="font-mono">📎</span>
+                      <span>{file.name}</span>
+                      <span className="text-foreground/40">({(file.size / 1024).toFixed(2)} KB)</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <p className="mt-2 text-xs text-foreground/40">
-                Comma-separated URLs to challenge files, resources, or downloads
+                Upload challenge files, resources, or downloads (max 100MB per file)
               </p>
             </div>
 
@@ -310,10 +354,14 @@ export default function Content() {
             <div className="pt-4 border-t border-foreground/10">
               <button
                 onClick={handleSubmit}
-                disabled={!isSignedIn || isSubmitting || !form.title || !form.flagSolution || !form.prizeAmount || !form.startDate || !form.endDate || !form.flagDetails}
+                disabled={!isSignedIn || isSubmitting || uploadingFiles || !form.title || !form.flagSolution || !form.prizeAmount || !form.startDate || !form.endDate || !form.flagDetails}
                 className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
               >
-                {isSubmitting ? (
+                {uploadingFiles ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="animate-pulse">Uploading Files...</span>
+                  </span>
+                ) : isSubmitting ? (
                   <span className="flex items-center justify-center gap-2">
                     <span className="animate-pulse">Creating Challenge...</span>
                   </span>
