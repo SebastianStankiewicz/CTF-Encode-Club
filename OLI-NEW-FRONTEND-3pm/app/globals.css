@@ -1,0 +1,42 @@
+/* globals.css */
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #000000;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #000000;
+    --foreground: #ffffff;
+  }
+}
+
+html, body {
+  @apply min-h-screen bg-background text-foreground font-mono;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+.wallet-adapter-button {
+    background-color: #4a5568 !important; /* gray-700 */
+}
+
+.wallet-adapter-button:hover {
+    background-color: #2d3748 !important; /* gray-800 */
+}
+
+.wallet-adapter-button-start-icon {
+    display: none !important;
+}

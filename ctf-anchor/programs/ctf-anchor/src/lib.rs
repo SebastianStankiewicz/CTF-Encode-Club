@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use solana_program::hash::hash;
 
-declare_id!("GrTTrdzrLzGnLE1rDbxxv4xdZgQi7pNXGeMpb5TaYecF");
+declare_id!("9NYLcKqUvux8fz8qxpwnEveosrZS7TG6oHn1FSPLkMjt");
 
 #[program]
 pub mod ctf_anchor {
