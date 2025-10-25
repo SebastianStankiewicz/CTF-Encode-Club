@@ -1,5 +1,5 @@
 import { Program, AnchorProvider, web3, Idl } from "@coral-xyz/anchor";
-import idlJson from "@/target/idl/ctf_anchor.json";
+import idlJson from  "@/rust-config/ctf_anchor.json";
 import { CtfAnchor } from "@/target/types/ctf_anchor";
 
 export const programId = new web3.PublicKey(

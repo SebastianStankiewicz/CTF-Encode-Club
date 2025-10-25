@@ -8,7 +8,8 @@ import "../globals.css";
 import * as anchor from "@coral-xyz/anchor";
 import bs58 from "bs58";
 import { web3, AnchorProvider, Program, BN } from "@coral-xyz/anchor";
-import idl from "@/target/idl/ctf_anchor.json";
+//import idl from "@/target/idl/ctf_anchor.json";
+import idl from "@/rust-config/ctf_anchor.json"
 import { CtfAnchor } from "@/target/types/ctf_anchor";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 

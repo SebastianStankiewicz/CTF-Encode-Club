@@ -15,8 +15,8 @@ import "../../globals.css";
 import { CtfAnchor } from "../../../target/types/ctf_anchor";
 import * as assert from "assert";
 
-import idl from "@/target/idl/ctf_anchor.json"; // Anchor IDL
-
+//import idl from "@/target/idl/ctf_anchor.json"; // Anchor IDL
+import idl from "@/rust-config//ctf_anchor.json"
 const PROGRAM_ID = new web3.PublicKey(
   "9NYLcKqUvux8fz8qxpwnEveosrZS7TG6oHn1FSPLkMjt",
 ); // CHANGE THIS TO THE NEW CONTRACT ADDY
