@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -21,7 +21,7 @@ const PROGRAM_ID = new web3.PublicKey(
   "9NYLcKqUvux8fz8qxpwnEveosrZS7TG6oHn1FSPLkMjt",
 ); // CHANGE THIS TO THE NEW CONTRACT ADDY
 
-// File Download Component - MUST be outside ChallengePage
+// File Download Component
 const FileDownloadLink = ({
   storageId,
   fileName,
@@ -63,37 +63,23 @@ const FileDownloadLink = ({
 
 export default function ChallengePage() {
   async function computeFlagSha256(flagString: string) {
-    console.log("🧩 [computeFlagSha256] Starting with:", flagString);
-
     try {
-      console.log("🧩 [computeFlagSha256] Checking crypto:", typeof crypto);
-      console.log("🧩 [computeFlagSha256] crypto object:", crypto);
-      console.log("🧩 [computeFlagSha256] crypto.subtle:", crypto?.subtle);
-
       if (!crypto || !crypto.subtle) {
         throw new Error(
           "crypto.subtle is undefined — wrong environment or shadowed import",
         );
       }
-
       const enc = new TextEncoder();
       const data = enc.encode(flagString);
-      console.log("🧩 [computeFlagSha256] Encoded data:", data);
-
       const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-      console.log("🧩 [computeFlagSha256] hashBuffer:", hashBuffer);
-
-      const hashArray = new Uint8Array(hashBuffer);
-      console.log("🧩 [computeFlagSha256] Final hashArray:", hashArray);
-
-      return hashArray;
+      return new Uint8Array(hashBuffer);
     } catch (err) {
       console.error("❌ [computeFlagSha256] FAILED:", err);
       throw err;
     }
   }
+
   const params = useParams();
-  const submitFlag = useMutation(api.myFunctions.submitFlag);
   const slug = params.slug as string;
   const { publicKey, signMessage, sendTransaction } = useWallet();
   const { connection } = useConnection();
@@ -104,8 +90,10 @@ export default function ChallengePage() {
     api.myFunctions.getChallengeComments,
     challenge ? { challengeId: challenge._id } : "skip",
   );
+
   const verifyOrCreateUser = useMutation(api.myFunctions.verifyOrCreateUser);
   const addComment = useMutation(api.myFunctions.addComment);
+  const submitFlag = useMutation(api.myFunctions.submitFlag);
   const recordTip = useMutation(api.myFunctions.recordTip);
 
   const [flagSubmission, setFlagSubmission] = useState("");
@@ -116,14 +104,20 @@ export default function ChallengePage() {
     message: string;
   } | null>(null);
 
-  // Tipping state
   const [tipAmount, setTipAmount] = useState("");
   const [isTipping, setIsTipping] = useState(false);
   const [showTipModal, setShowTipModal] = useState(false);
 
-  // Comment state
   const [commentText, setCommentText] = useState("");
   const [isCommenting, setIsCommenting] = useState(false);
+
+  // Auto-dismiss submission result popup after 5 seconds
+  useEffect(() => {
+    if (submissionResult) {
+      const timer = setTimeout(() => setSubmissionResult(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [submissionResult]);
 
   // Sign in handler
   const handleSignIn = useCallback(async () => {
@@ -136,7 +130,6 @@ export default function ChallengePage() {
     try {
       const message = new TextEncoder().encode("Sign in to CTF Manager");
       const signature = await signMessage(message);
-      const signatureBase58 = bs58.encode(signature);
 
       const result = await verifyOrCreateUser({
         publicKey: publicKey.toBase58(),
@@ -158,69 +151,68 @@ export default function ChallengePage() {
     }
   }, [publicKey, signMessage, verifyOrCreateUser, setIsSignedIn]);
 
-  //const program = anchor.workspace.ctfAnchor as Program<CtfAnchor>;
   // Submit flag handler
   const handleFlagSubmit = async () => {
     if (!flagSubmission.trim()) {
       alert("Please enter a flag.");
       return;
     }
-
     if (!challenge) return;
 
     setIsSubmitting(true);
     try {
-      let bump = challenge.bump;
       const connection = new web3.Connection("https://api.devnet.solana.com");
-
-      // Use window.solana (Phantom wallet) directly as the wallet adapter
       const provider = new AnchorProvider(connection, window.solana, {
         preflightCommitment: "processed",
       });
-
-      //Through context connect my phantom wallet to anchor
       const program = new Program<CtfAnchor>(idl as CtfAnchor, provider);
+
+      // Try Anchor on-chain submission
       try {
-        const tx = await program.methods
-          .submitGuess(flagSubmission.trim(), bump)
+        await program.methods
+          .submitGuess(flagSubmission.trim(), challenge.bump)
           .accounts({
             guesser: publicKey,
             challenge: challenge.challengePDA,
             systemProgram: SystemProgram.programId,
           })
           .rpc();
-        console.log("User guess made it through:", tx);
       } catch (txErr: any) {
         console.warn("Transaction failed, continuing with hash check:", txErr);
       }
+
+      // SHA256 check
       const hashBytes = await computeFlagSha256(flagSubmission.trim());
       const newComparison = new Uint8Array(32);
       newComparison.set(hashBytes);
-      if (String(newComparison) === challenge.flagHash) {
-        console.log("ALL THE LOGIC TO THEN ASSIGN POINTS CAN GO HERE");
-        //Set the flag to solved
-        //Check if its been previousley solved if NOT then woah first place otherwise then asign points form 1 - 3
-        const result = await submitFlag({
+
+      const submittedHash = Array.from(newComparison).join(",");
+      const storedHash = challenge.flagHash;
+
+      if (submittedHash === storedHash) {
+        await submitFlag({
           challengeId: challenge._id,
           userPublicKey: publicKey.toBase58(),
           flagSubmission: flagSubmission.trim(),
         });
-        console.log(result);
+
+        setSubmissionResult({
+          success: true,
+          message: "🎉 Correct! Flag accepted and points awarded.",
+        });
+        setFlagSubmission("");
       } else {
-        console.log("Submitted:", newComparison);
-        console.log("Stored:", challenge.flagHash);
+        setSubmissionResult({
+          success: false,
+          message: "❌ Incorrect flag. Try again.",
+        });
       }
     } catch (err: any) {
-      // If the tx fails, print all logs
-      if (err.logs) {
-        console.log("Transaction logs:");
-        err.logs.forEach((l: string) => console.log(l));
-      } else if (err.error?.logs) {
-        console.log("Transaction logs:");
-        err.error.logs.forEach((l: string) => console.log(l));
-      } else {
-        console.error(err);
-      }
+      console.error(err);
+      setSubmissionResult({
+        success: false,
+        message: "❌ Error submitting flag. Check console for details.",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -245,10 +237,7 @@ export default function ChallengePage() {
 
     setIsTipping(true);
     try {
-      // Get creator's public key
       const creatorPubkey = new web3.PublicKey(challenge.creatorPublicKey);
-
-      // Create transaction
       const transaction = new web3.Transaction().add(
         SystemProgram.transfer({
           fromPubkey: publicKey,
@@ -256,14 +245,9 @@ export default function ChallengePage() {
           lamports: amount * LAMPORTS_PER_SOL,
         }),
       );
-
-      // Send transaction
       const signature = await sendTransaction(transaction, connection);
-
-      // Wait for confirmation
       await connection.confirmTransaction(signature, "confirmed");
 
-      // Record tip in database
       await recordTip({
         challengeId: challenge._id,
         fromPublicKey: publicKey.toBase58(),
@@ -289,7 +273,6 @@ export default function ChallengePage() {
       alert("Please enter a comment.");
       return;
     }
-
     if (!isSignedIn) {
       alert("Please sign in first.");
       return;
@@ -313,6 +296,7 @@ export default function ChallengePage() {
     }
   };
 
+  // Challenge status helpers
   const getChallengeStatus = (startDate: string, endDate: string) => {
     const now = new Date();
     const start = new Date(startDate);
@@ -321,20 +305,17 @@ export default function ChallengePage() {
     if (now > end) return "ended";
     return "active";
   };
-
   const getDaysUntilEnd = (endDate: string) => {
     const now = new Date();
     const end = new Date(endDate);
     const diffTime = end.getTime() - now.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
-
   const isHintVisible = (hintReleaseDate?: string) => {
     if (!hintReleaseDate) return true;
     return new Date() >= new Date(hintReleaseDate);
   };
 
-  // Loading
   if (challenge === undefined) {
     return (
       <div className="min-h-screen bg-background text-foreground p-6 flex items-center justify-center">
@@ -346,7 +327,6 @@ export default function ChallengePage() {
     );
   }
 
-  // Not found
   if (challenge === null) {
     return (
       <div className="min-h-screen bg-background text-foreground p-6 flex items-center justify-center">
@@ -382,7 +362,6 @@ export default function ChallengePage() {
         </div>
 
         {/* Challenge Header */}
-        {/* Challenge Header */}
         <div className="mb-6 p-6 bg-foreground/5 border border-foreground/10 rounded-lg">
           <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
             <div className="flex items-center gap-3 flex-wrap">
@@ -391,8 +370,8 @@ export default function ChallengePage() {
                   status === "active"
                     ? "bg-green-500/10 text-green-400 border border-green-500/20"
                     : status === "upcoming"
-                      ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                      : "bg-red-500/10 text-red-400 border border-red-500/20"
+                    ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                    : "bg-red-500/10 text-red-400 border border-red-500/20"
                 }`}
               >
                 {status.toUpperCase()}
@@ -412,14 +391,14 @@ export default function ChallengePage() {
               </div>
               <div className="text-sm text-foreground/60">Prize Pool</div>
 
-              {/* Display solved/no prize message */}
               {challenge.solveCount !== undefined &&
                 challenge.solveCount >= 1 && (
-                  <div className="mt-1 text-sm text-red-400 font-medium">
-                    ⚠️ This challenge has already been solved (
-                    {challenge.solveCount}{" "}
-                    {challenge.solveCount === 1 ? "solver" : "solvers"}). No
-                    prize remaining. But Solve for points.
+                  <div className="mb-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                    <span>
+                      This challenge has already been solved ({challenge.solveCount}{" "}
+                      {challenge.solveCount === 1 ? "solver" : "solvers"}). No prize
+                      remaining. You can still solve it for points.
+                    </span>
                   </div>
                 )}
             </div>
@@ -436,8 +415,9 @@ export default function ChallengePage() {
           )}
         </div>
 
+        {/* Main Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Section - Challenge Details & Comments */}
+          {/* Left Section */}
           <div className="lg:col-span-2 space-y-6">
             <div className="p-6 border border-foreground/10 bg-foreground/5 rounded-lg">
               <h2 className="text-xl font-semibold font-mono mb-4">
@@ -473,7 +453,6 @@ export default function ChallengePage() {
                 </div>
               )}
 
-              {/* Updated Files Section */}
               {challenge.files && challenge.files.length > 0 && (
                 <div className="mt-6">
                   <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -500,7 +479,6 @@ export default function ChallengePage() {
             <div className="p-6 border border-foreground/10 bg-foreground/5 rounded-lg">
               <h2 className="text-xl font-semibold font-mono mb-4">Comments</h2>
 
-              {/* Add Comment */}
               {isSignedIn ? (
                 <div className="mb-6">
                   <textarea
@@ -526,7 +504,6 @@ export default function ChallengePage() {
                 </div>
               )}
 
-              {/* Comments List */}
               <div className="space-y-4">
                 {comments === undefined ? (
                   <p className="text-foreground/60 text-center py-4">
@@ -572,7 +549,7 @@ export default function ChallengePage() {
             </div>
           </div>
 
-          {/* Right Section - Submit & Info */}
+          {/* Right Section */}
           <div className="space-y-6">
             {!isSignedIn && (
               <div className="p-6 border border-foreground/10 bg-foreground/5 rounded-lg">
@@ -650,6 +627,7 @@ export default function ChallengePage() {
               </div>
             )}
 
+            {/* Challenge Info */}
             <div className="p-6 border border-foreground/10 bg-foreground/5 rounded-lg">
               <h3 className="text-lg font-semibold mb-3">Challenge Info</h3>
               <div className="space-y-3 text-sm">

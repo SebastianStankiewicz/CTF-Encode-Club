@@ -224,24 +224,26 @@ export default function Content() {
       {/* ==== Warning Message (Glowing) ==== */}
       {!isSignedIn && (
         <div className="max-w-4xl mx-auto mb-6">
-          <div className="p-4 bg-black/10 border border-white/20 rounded-lg shadow-[0_0_15px_rgba(255,255,255,0.5),0_0_30px_rgba(255,255,255,0.3)] animate-[pulseGlow_2s_ease-in-out_infinite]">
+          <div className="p-4 bg-black/10 border border-white/20 rounded-lg shadow-[0_0_15px_rgba(255,255,255,0.5),0_0_30px_rgba(255,255,255,0.5)] animate-[pulseGlow_2s_ease-in-out_infinite]">
             <p className="text-white/80 text-sm">
               Please connect and sign in using the wallet button in the sidebar
             </p>
           </div>
-          <style jsx>{`
-            @keyframes pulseGlow {
-              0%,
-              100% {
-                box-shadow: 0 0 15px rgba(57, 53, 255, 0.5),
-                  0 0 30px rgba(80, 82, 255, 0.3);
-              }
-              50% {
-                box-shadow: 0 0 25px rgba(102, 252, 255, 0.9),
-                  0 0 45px rgba(118, 225, 255, 0.6);
-              }
-            }
-          `}</style>
+
+            <style jsx>{`
+    @keyframes borderPulse {
+      0%, 100% {
+        border-color: #d1d5db; /* gray-300 */
+      }
+      50% {
+        border-color: #3b82f6; /* blue-500 or any accent color */
+      }
+    }
+
+    .animate-borderPulse {
+      animation: borderPulse 2s ease-in-out infinite;
+    }
+  `}</style> 
         </div>
       )}
 
