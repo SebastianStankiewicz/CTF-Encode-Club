@@ -57,7 +57,7 @@ export default function LeaderboardPage() {
       {userStats && (
         <div className="max-w-4xl mx-auto mb-6 p-4 bg-foreground/5 rounded-lg border border-foreground/10">
           <p className="text-sm text-foreground/60">Your Position</p>
-          <p className="text-2xl font-bold text-blue-700">
+          <p className="text-2xl font-bold text-white-700">
             {userStats.rank ? `#${userStats.rank}` : "Unranked"} • {userStats.score} pts
           </p>
         </div>
@@ -124,7 +124,7 @@ export default function LeaderboardPage() {
 
                       {/* Score */}
                       <td className="p-4">
-                        <span className="font-bold text-blue-700">{user.score}</span>
+                        <span className="font-bold text-white-700">{user.score}</span>
                       </td>
                     </tr>
                   );

@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { api } from "../../convex/_generated/api";
@@ -9,14 +8,13 @@ import "../globals.css";
 import * as anchor from "@coral-xyz/anchor";
 import bs58 from "bs58";
 import { web3, AnchorProvider, Program, BN } from "@coral-xyz/anchor";
-import { verifyOrCreateUser } from "@/convex/myFunctions";
-import idl from "@/target/idl/ctf_anchor.json"; // Anchor IDL
+import idl from "@/target/idl/ctf_anchor.json";
 import { CtfAnchor } from "@/target/types/ctf_anchor";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
 const PROGRAM_ID = new web3.PublicKey(
   "9NYLcKqUvux8fz8qxpwnEveosrZS7TG6oHn1FSPLkMjt"
-); // CHANGE THIS TO THE NEW CONTRACT ADDY 
+); // CHANGE THIS TO THE NEW CONTRACT ADDY
 
 export default function Content() {
   const { publicKey, connected } = useWallet();
@@ -37,23 +35,24 @@ export default function Content() {
     flagFormat: "",
     hint: "",
     hintReleaseDate: "",
+    difficulty: "easy", // NEW FIELD
   });
-
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadedFileIds, setUploadedFileIds] = useState<string[]>([]);
   const [fileNames, setFileNames] = useState<string[]>([]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   async function computeFlagSha256(flagString: string) {
     const enc = new TextEncoder();
-    const data = enc.encode(flagString);               // UTF-8 bytes of input
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data); // ArrayBuffer (32 bytes)
-    return new Uint8Array(hashBuffer);                 // Uint8Array(32)
+    const data = enc.encode(flagString);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    return new Uint8Array(hashBuffer);
   }
-
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -64,28 +63,21 @@ export default function Content() {
 
   const uploadFiles = async () => {
     if (selectedFiles.length === 0) return { fileIds: [], names: [] };
-
     setUploadingFiles(true);
     const fileIds: string[] = [];
     const names: string[] = [];
-
     try {
       for (const file of selectedFiles) {
-        // Get upload URL
         const uploadUrl = await generateUploadUrl();
-
-        // Upload file
         const result = await fetch(uploadUrl, {
           method: "POST",
           headers: { "Content-Type": file.type },
           body: file,
         });
-
         const { storageId } = await result.json();
         fileIds.push(storageId);
         names.push(file.name);
       }
-
       setUploadedFileIds(fileIds);
       setFileNames(names);
       return { fileIds, names };
@@ -102,32 +94,28 @@ export default function Content() {
       alert("Please connect and sign in first!");
       return;
     }
-
-    if (!form.title || !form.flagSolution || !form.prizeAmount || !form.startDate || !form.endDate) {
+    if (
+      !form.title ||
+      !form.flagSolution ||
+      !form.prizeAmount ||
+      !form.startDate ||
+      !form.endDate ||
+      !form.flagDetails ||
+      !form.difficulty
+    ) {
       alert("Fill all required fields!");
       return;
     }
-
     setIsSubmitting(true);
     try {
-      // Upload files first
+      // === ON-CHAIN: CREATE CHALLENGE ===
       const connection = new web3.Connection("https://api.devnet.solana.com");
-      
-      // Use window.solana (Phantom wallet) directly as the wallet adapter
-      const provider = new AnchorProvider(
-        connection,
-        window.solana,
-        { preflightCommitment: "processed" }
-      );
-
-      //Through context connect my phantom wallet to anchor
+      const provider = new AnchorProvider(connection, window.solana, {
+        preflightCommitment: "processed",
+      });
       const program = new Program<CtfAnchor>(idl as CtfAnchor, provider);
 
-
-      // Generate a random challenge ID
       const challengeId = new BN(Math.floor(Math.random() * 1_000_000));
-
-      // Compute PDA for challenge
       const [challengePda] = web3.PublicKey.findProgramAddressSync(
         [
           Buffer.from("challenge"),
@@ -137,15 +125,12 @@ export default function Content() {
         PROGRAM_ID
       );
 
-
       const hashBytes = await computeFlagSha256(form.flagSolution);
-      // store directly in your 32-byte field:
       const flagHash = new Uint8Array(32);
-      flagHash.set(hashBytes); // hashBytes is exactly 32 bytes
-      const depositSol = Number(form.prizeAmount);
-      const depositLamports = new anchor.BN(depositSol * LAMPORTS_PER_SOL);
+      flagHash.set(hashBytes);
 
-      // Call your on-chain program
+      const depositLamports = new anchor.BN(Number(form.prizeAmount) * LAMPORTS_PER_SOL);
+
       const tx = await program.methods
         .createChallenge(challengeId, flagHash, depositLamports)
         .accounts({
@@ -155,10 +140,11 @@ export default function Content() {
         })
         .rpc({ skipPreflight: true });
 
-      console.log("✅ Challenge created on-chain:", tx);
+      console.log("Challenge created on-chain:", tx);
+
+      // === OFF-CHAIN: UPLOAD FILES + SAVE TO CONVEX ===
       const { fileIds, names } = await uploadFiles();
 
-      // Create challenge with file storage IDs and publicKey
       await addChallenge({
         title: form.title,
         flagSolution: form.flagSolution,
@@ -172,34 +158,58 @@ export default function Content() {
         flagFormat: form.flagFormat || undefined,
         hint: form.hint || undefined,
         hintReleaseDate: form.hintReleaseDate || undefined,
-        creatorPublicKey: publicKey.toBase58(), // Add this
+        creatorPublicKey: publicKey.toBase58(),
         challengePDA: challengePda.toBase58(),
         flagHash: String(flagHash),
+        difficulty: form.difficulty, // NEW
       });
 
-      alert("Challenge created successfully!");
-      setForm({ 
+      alert("Challenge created successfully! You earned 500 points!");
+      setForm({
         title: "",
-        flagSolution: "", 
-        prizeAmount: "", 
-        startDate: "", 
-        endDate: "", 
-        flagDetails: "", 
+        flagSolution: "",
+        prizeAmount: "",
+        startDate: "",
+        endDate: "",
+        flagDetails: "",
         challengeType: "misc",
         flagFormat: "",
         hint: "",
         hintReleaseDate: "",
+        difficulty: "easy",
       });
       setSelectedFiles([]);
       setUploadedFileIds([]);
       setFileNames([]);
     } catch (err) {
-      console.error("❌ Failed to create challenge:", err);
+      console.error("Failed to create challenge:", err);
       alert("Error creating challenge. See console.");
     } finally {
       setIsSubmitting(false);
     }
-  }, [connected, publicKey, isSignedIn, form, selectedFiles, addChallenge, generateUploadUrl]);
+  }, [
+    connected,
+    publicKey,
+    isSignedIn,
+    form,
+    selectedFiles,
+    addChallenge,
+    generateUploadUrl,
+  ]);
+
+  // Points reward preview
+  const getPointsReward = (difficulty: string) => {
+    switch (difficulty) {
+      case "easy":
+        return 100;
+      case "medium":
+        return 300;
+      case "hard":
+        return 500;
+      default:
+        return 100;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground p-6">
@@ -211,14 +221,27 @@ export default function Content() {
         </p>
       </div>
 
-      {/* ==== Warning Message ==== */}
+      {/* ==== Warning Message (Glowing) ==== */}
       {!isSignedIn && (
         <div className="max-w-4xl mx-auto mb-6">
-          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-            <p className="text-blue-700 text-sm">
-              ⚠️ Please connect and sign in using the wallet button in the sidebar
+          <div className="p-4 bg-black/10 border border-white/20 rounded-lg shadow-[0_0_15px_rgba(255,255,255,0.5),0_0_30px_rgba(255,255,255,0.3)] animate-[pulseGlow_2s_ease-in-out_infinite]">
+            <p className="text-white/80 text-sm">
+              Please connect and sign in using the wallet button in the sidebar
             </p>
           </div>
+          <style jsx>{`
+            @keyframes pulseGlow {
+              0%,
+              100% {
+                box-shadow: 0 0 15px rgba(57, 53, 255, 0.5),
+                  0 0 30px rgba(80, 82, 255, 0.3);
+              }
+              50% {
+                box-shadow: 0 0 25px rgba(102, 252, 255, 0.9),
+                  0 0 45px rgba(118, 225, 255, 0.6);
+              }
+            }
+          `}</style>
         </div>
       )}
 
@@ -259,6 +282,37 @@ export default function Content() {
                 <option value="forensics">Forensics</option>
                 <option value="osint">OSINT</option>
               </select>
+            </div>
+
+            {/* Difficulty Selection */}
+            <div>
+              <label className="block text-sm font-medium text-foreground/60 mb-2">
+                Difficulty *
+                <span className="ml-2 text-xs text-foreground/40">
+                  (determines point reward for solvers)
+                </span>
+              </label>
+              <select
+                name="difficulty"
+                value={form.difficulty}
+                onChange={handleChange}
+                className="w-full p-3 rounded-lg bg-foreground/5 border border-foreground/10 text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+              >
+                <option value="easy">Easy (100 points)</option>
+                <option value="medium">Medium (300 points)</option>
+                <option value="hard">Hard (500 points)</option>
+              </select>
+              <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                <p className="text-sm text-blue-400">
+                  Solvers will earn{" "}
+                  <span className="font-bold">{getPointsReward(form.difficulty)} points</span> for
+                  completing this challenge
+                </p>
+                <p className="text-xs text-blue-300 mt-1">
+                  You'll earn <span className="font-bold">500 points</span> for creating this
+                  challenge
+                </p>
+              </div>
             </div>
 
             {/* Flag Solution */}
@@ -326,7 +380,6 @@ export default function Content() {
                   className="w-full p-3 rounded-lg bg-foreground/5 border border-foreground/10 text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-foreground/60 mb-2">
                   End Date *
@@ -403,10 +456,15 @@ export default function Content() {
                 <div className="mt-3 space-y-2">
                   <p className="text-sm text-foreground/60">Selected files:</p>
                   {selectedFiles.map((file, idx) => (
-                    <div key={idx} className="text-sm text-foreground/80 flex items-center gap-2">
-                      <span className="font-mono">📎</span>
+                    <div
+                      key={idx}
+                      className="text-sm text-foreground/80 flex items-center gap-2"
+                    >
+                      <span className="font-mono">attachment</span>
                       <span>{file.name}</span>
-                      <span className="text-foreground/40">({(file.size / 1024).toFixed(2)} KB)</span>
+                      <span className="text-foreground/40">
+                        ({(file.size / 1024).toFixed(2)} KB)
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -420,7 +478,18 @@ export default function Content() {
             <div className="pt-4 border-t border-foreground/10">
               <button
                 onClick={handleSubmit}
-                disabled={!isSignedIn || isSubmitting || uploadingFiles || !form.title || !form.flagSolution || !form.prizeAmount || !form.startDate || !form.endDate || !form.flagDetails}
+                disabled={
+                  !isSignedIn ||
+                  isSubmitting ||
+                  uploadingFiles ||
+                  !form.title ||
+                  !form.flagSolution ||
+                  !form.prizeAmount ||
+                  !form.startDate ||
+                  !form.endDate ||
+                  !form.flagDetails ||
+                  !form.difficulty
+                }
                 className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
               >
                 {uploadingFiles ? (
