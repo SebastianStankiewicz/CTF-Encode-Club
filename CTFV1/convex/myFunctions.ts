@@ -78,14 +78,34 @@ export const addChallenge = mutation({
     hintReleaseDate: v.optional(v.string()),
     fileNames: v.optional(v.array(v.string())),
     creatorPublicKey: v.string(),
+    difficulty: v.string(), // "easy", "medium", "hard"
   },
   handler: async (ctx, args) => {
-    const { creatorPublicKey, ...challengeData } = args;
+    const { creatorPublicKey, difficulty, ...challengeData } = args;
+
+    // Calculate points based on difficulty
+    const pointsReward = difficulty === "easy" ? 100 : difficulty === "medium" ? 300 : 500;
 
     const challengeId = await ctx.db.insert("challenges", {
       ...challengeData,
       creatorPublicKey,
+      difficulty,
+      pointsReward,
+      solveCount: 0,
     });
+
+    // Award creator 500 points for creating challenge
+    const creator = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), creatorPublicKey))
+      .first();
+
+    if (creator) {
+      await ctx.db.patch(creator._id, {
+        score: (creator.score || 0) + 500,
+      });
+      console.log(`Awarded 500 points to ${creatorPublicKey} for creating challenge`);
+    }
 
     return challengeId;
   },
@@ -116,6 +136,277 @@ export const getAllChallenges = query({
       .take(limit);
 
     return challenges;
+  },
+});
+
+// ==================== FLAG SUBMISSION & SOLVES ====================
+
+export const submitFlag = mutation({
+  args: {
+    challengeId: v.id("challenges"),
+    userPublicKey: v.string(),
+    flagSubmission: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Get challenge
+    const challenge = await ctx.db.get(args.challengeId);
+    if (!challenge) throw new Error("Challenge not found");
+
+    // Check if already solved
+    const existingSolve = await ctx.db
+      .query("solves")
+      .filter((q) => 
+        q.and(
+          q.eq(q.field("challengeId"), args.challengeId),
+          q.eq(q.field("userPublicKey"), args.userPublicKey)
+        )
+      )
+      .first();
+
+    if (existingSolve) {
+      return { 
+        success: false, 
+        message: "You've already solved this challenge!",
+        pointsEarned: 0
+      };
+    }
+
+    // Verify flag
+    if (args.flagSubmission.trim() !== challenge.flagSolution) {
+      return { 
+        success: false, 
+        message: "Incorrect flag. Try again!",
+        pointsEarned: 0
+      };
+    }
+
+    // Record solve
+    await ctx.db.insert("solves", {
+      challengeId: args.challengeId,
+      userPublicKey: args.userPublicKey,
+      solvedAt: Date.now(),
+      pointsEarned: challenge.pointsReward || 0,
+    });
+
+    // Update challenge solve count
+    await ctx.db.patch(args.challengeId, {
+      solveCount: (challenge.solveCount || 0) + 1,
+    });
+
+    // Update user points
+    const user = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), args.userPublicKey))
+      .first();
+
+    if (user) {
+      await ctx.db.patch(user._id, {
+        score: (user.score || 0) + (challenge.pointsReward || 0),
+      });
+    }
+
+    return {
+      success: true,
+      message: `Correct! You earned ${challenge.pointsReward} points!`,
+      pointsEarned: challenge.pointsReward || 0,
+    };
+  },
+});
+
+export const getChallengeLeaderboard = query({
+  args: { challengeId: v.id("challenges") },
+  handler: async (ctx, args) => {
+    const solves = await ctx.db
+      .query("solves")
+      .filter((q) => q.eq(q.field("challengeId"), args.challengeId))
+      .collect();
+
+    // Sort by solve time (fastest first)
+    const sorted = solves.sort((a, b) => a.solvedAt - b.solvedAt);
+
+    // Get user info for each solve
+    const leaderboard = await Promise.all(
+      sorted.map(async (solve, index) => {
+        const user = await ctx.db
+          .query("users")
+          .filter((q) => q.eq(q.field("publicKey"), solve.userPublicKey))
+          .first();
+
+        return {
+          rank: index + 1,
+          publicKey: solve.userPublicKey,
+          username: user?.username || "Anonymous",
+          solvedAt: solve.solvedAt,
+          pointsEarned: solve.pointsEarned,
+        };
+      })
+    );
+
+    return leaderboard;
+  },
+});
+
+export const getUserSolves = query({
+  args: { publicKey: v.string() },
+  handler: async (ctx, args) => {
+    const solves = await ctx.db
+      .query("solves")
+      .filter((q) => q.eq(q.field("userPublicKey"), args.publicKey))
+      .collect();
+
+    return solves;
+  },
+});
+
+// ==================== WRITEUPS ====================
+
+export const submitWriteup = mutation({
+  args: {
+    challengeId: v.id("challenges"),
+    userPublicKey: v.string(),
+    title: v.string(),
+    content: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Check if user solved the challenge
+    const solve = await ctx.db
+      .query("solves")
+      .filter((q) => 
+        q.and(
+          q.eq(q.field("challengeId"), args.challengeId),
+          q.eq(q.field("userPublicKey"), args.userPublicKey)
+        )
+      )
+      .first();
+
+    if (!solve) {
+      throw new Error("You must solve the challenge before submitting a writeup");
+    }
+
+    const writeupId = await ctx.db.insert("writeups", {
+      challengeId: args.challengeId,
+      userPublicKey: args.userPublicKey,
+      title: args.title,
+      content: args.content,
+      createdAt: Date.now(),
+      upvotes: 0,
+    });
+
+    return writeupId;
+  },
+});
+
+export const getChallengeWriteups = query({
+  args: { challengeId: v.id("challenges") },
+  handler: async (ctx, args) => {
+    const writeups = await ctx.db
+      .query("writeups")
+      .filter((q) => q.eq(q.field("challengeId"), args.challengeId))
+      .collect();
+
+    // Get user info for each writeup
+    const enriched = await Promise.all(
+      writeups.map(async (writeup) => {
+        const user = await ctx.db
+          .query("users")
+          .filter((q) => q.eq(q.field("publicKey"), writeup.userPublicKey))
+          .first();
+
+        return {
+          ...writeup,
+          username: user?.username || "Anonymous",
+        };
+      })
+    );
+
+    return enriched.sort((a, b) => b.upvotes - a.upvotes);
+  },
+});
+
+export const getWriteupById = query({
+  args: { writeupId: v.id("writeups") },
+  handler: async (ctx, args) => {
+    const writeup = await ctx.db.get(args.writeupId);
+    if (!writeup) return null;
+
+    const user = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), writeup.userPublicKey))
+      .first();
+
+    return {
+      ...writeup,
+      username: user?.username || "Anonymous",
+    };
+  },
+});
+
+export const upvoteWriteup = mutation({
+  args: {
+    writeupId: v.id("writeups"),
+  },
+  handler: async (ctx, args) => {
+    const writeup = await ctx.db.get(args.writeupId);
+    if (!writeup) throw new Error("Writeup not found");
+
+    await ctx.db.patch(args.writeupId, {
+      upvotes: (writeup.upvotes || 0) + 1,
+    });
+
+    return { success: true };
+  },
+});
+
+// ==================== POINTS TIPPING ====================
+
+export const tipWithPoints = mutation({
+  args: {
+    fromPublicKey: v.string(),
+    toPublicKey: v.string(),
+    amount: v.number(),
+    challengeId: v.optional(v.id("challenges")),
+  },
+  handler: async (ctx, args) => {
+    // Get sender
+    const sender = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), args.fromPublicKey))
+      .first();
+
+    if (!sender) throw new Error("Sender not found");
+    if ((sender.score || 0) < args.amount) {
+      throw new Error("Insufficient points");
+    }
+
+    // Get recipient
+    const recipient = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), args.toPublicKey))
+      .first();
+
+    if (!recipient) throw new Error("Recipient not found");
+
+    // Transfer points
+    await ctx.db.patch(sender._id, {
+      score: (sender.score || 0) - args.amount,
+    });
+
+    await ctx.db.patch(recipient._id, {
+      score: (recipient.score || 0) + args.amount,
+    });
+
+    // Record tip
+    await ctx.db.insert("tips", {
+      fromPublicKey: args.fromPublicKey,
+      toPublicKey: args.toPublicKey,
+      amount: args.amount,
+      type: "points",
+      challengeId: args.challengeId,
+      timestamp: Date.now(),
+    });
+
+    console.log(`${args.fromPublicKey} tipped ${args.amount} points to ${args.toPublicKey}`);
+    return { success: true };
   },
 });
 
@@ -204,11 +495,24 @@ export const getUserStats = query({
 
     if (!user) return null;
 
+    // Get user's solves
+    const solves = await ctx.db
+      .query("solves")
+      .filter((q) => q.eq(q.field("userPublicKey"), args.publicKey))
+      .collect();
+
+    // Get user's created challenges
+    const createdChallenges = await ctx.db
+      .query("challenges")
+      .filter((q) => q.eq(q.field("creatorPublicKey"), args.publicKey))
+      .collect();
+
+    // Get all users for ranking
     const allUsers = await ctx.db.query("users").collect();
 
     const sortedUsers = allUsers
       .filter((u) => u.score > 0)
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
 
     const userRank = sortedUsers.findIndex((u) => u._id === user._id) + 1;
 
@@ -216,6 +520,8 @@ export const getUserStats = query({
       ...user,
       rank: userRank > 0 ? userRank : null,
       totalUsers: sortedUsers.length,
+      solvedChallenges: solves.length,
+      createdChallenges: createdChallenges.length,
     };
   },
 });
@@ -235,7 +541,7 @@ export const updateUserScore = mutation({
       throw new Error("User not found");
     }
 
-    const newScore = user.score + args.points;
+    const newScore = (user.score || 0) + args.points;
 
     await ctx.db.patch(user._id, {
       score: newScore,
@@ -261,17 +567,37 @@ export const getLeaderboard = query({
       .take(limit);
 
     const sortedUsers = users
-      .filter((user) => user.score > 0)
-      .sort((a, b) => b.score - a.score)
+      .filter((user) => (user.score || 0) > 0)
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
       .map((user, index) => ({
         rank: index + 1,
         publicKey: user.publicKey,
-        score: user.score,
+        score: user.score || 0,
         username: user.username || user.publicKey.slice(0, 8) + "...",
         createdAt: user.createdAt,
       }));
 
     return sortedUsers;
+  },
+});
+
+export const getGlobalLeaderboard = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const users = await ctx.db.query("users").collect();
+    
+    const sorted = users
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, args.limit || 100);
+
+    return sorted.map((user, index) => ({
+      rank: index + 1,
+      publicKey: user.publicKey,
+      username: user.username || "Anonymous",
+      totalPoints: user.score || 0,
+    }));
   },
 });
 
@@ -284,7 +610,6 @@ export const addComment = mutation({
     text: v.string(),
   },
   handler: async (ctx, args) => {
-    // Remove auth check, just use the passed publicKey
     const commentId = await ctx.db.insert("comments", {
       challengeId: args.challengeId,
       userPublicKey: args.publicKey,
@@ -296,7 +621,7 @@ export const addComment = mutation({
   },
 });
 
-export const getChallengeComments  = query({
+export const getChallengeComments = query({
   args: {
     challengeId: v.id("challenges"),
   },
@@ -337,12 +662,12 @@ export const recordTip = mutation({
     signature: v.string(),
   },
   handler: async (ctx, args) => {
-    // Remove auth check
     const tipId = await ctx.db.insert("tips", {
       challengeId: args.challengeId,
       fromPublicKey: args.fromPublicKey,
       toPublicKey: args.toPublicKey,
       amount: args.amount,
+      type: "sol",
       signature: args.signature,
       timestamp: Date.now(),
     });

@@ -26,6 +26,7 @@ export default function Content() {
     flagFormat: "",
     hint: "",
     hintReleaseDate: "",
+    difficulty: "easy", // Add this
   });
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -84,7 +85,7 @@ export default function Content() {
       return;
     }
 
-    if (!form.title || !form.flagSolution || !form.prizeAmount || !form.startDate || !form.endDate) {
+    if (!form.title || !form.flagSolution || !form.prizeAmount || !form.startDate || !form.endDate || !form.difficulty) {
       alert("Fill all required fields!");
       return;
     }
@@ -108,10 +109,11 @@ export default function Content() {
         flagFormat: form.flagFormat || undefined,
         hint: form.hint || undefined,
         hintReleaseDate: form.hintReleaseDate || undefined,
-        creatorPublicKey: publicKey.toBase58(), // Add this
+        creatorPublicKey: publicKey.toBase58(),
+        difficulty: form.difficulty, // Add this
       });
 
-      alert("Challenge created successfully!");
+      alert("Challenge created successfully! You earned 500 points!");
       setForm({ 
         title: "",
         flagSolution: "", 
@@ -123,6 +125,7 @@ export default function Content() {
         flagFormat: "",
         hint: "",
         hintReleaseDate: "",
+        difficulty: "easy",
       });
       setSelectedFiles([]);
       setUploadedFileIds([]);
@@ -134,6 +137,16 @@ export default function Content() {
       setIsSubmitting(false);
     }
   }, [connected, publicKey, isSignedIn, form, selectedFiles, addChallenge, generateUploadUrl]);
+
+  // Get points reward based on difficulty
+  const getPointsReward = (difficulty: string) => {
+    switch(difficulty) {
+      case "easy": return 100;
+      case "medium": return 300;
+      case "hard": return 500;
+      default: return 100;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground p-6">
@@ -148,11 +161,22 @@ export default function Content() {
       {/* ==== Warning Message ==== */}
       {!isSignedIn && (
         <div className="max-w-4xl mx-auto mb-6">
-          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-            <p className="text-blue-700 text-sm">
-              ⚠️ Please connect and sign in using the wallet button in the sidebar
+          <div className="p-4 bg-black/10 border border-white/20 rounded-lg shadow-[0_0_15px_rgba(255,255,255,0.5),0_0_30px_rgba(255,255,255,0.3)] animate-[pulseGlow_2s_ease-in-out_infinite]">
+            <p className="text-white/80 text-sm">
+              Please connect and sign in using the wallet button in the sidebar
             </p>
           </div>
+
+          <style jsx>{`
+            @keyframes pulseGlow {
+              0%, 100% {
+                box-shadow: 0 0 15px rgba(57, 53, 255, 0.5), 0 0 30px rgba(80, 82, 255, 0.3);
+              }
+              50% {
+                box-shadow: 0 0 25px rgba(102, 252, 255, 0.9), 0 0 45px rgba(118, 225, 255, 0.6);
+              }
+            }
+          `}</style>
         </div>
       )}
 
@@ -193,6 +217,34 @@ export default function Content() {
                 <option value="forensics">Forensics</option>
                 <option value="osint">OSINT</option>
               </select>
+            </div>
+
+            {/* Difficulty Selection */}
+            <div>
+              <label className="block text-sm font-medium text-foreground/60 mb-2">
+                Difficulty * 
+                <span className="ml-2 text-xs text-foreground/40">
+                  (determines point reward for solvers)
+                </span>
+              </label>
+              <select
+                name="difficulty"
+                value={form.difficulty}
+                onChange={handleChange}
+                className="w-full p-3 rounded-lg bg-foreground/5 border border-foreground/10 text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+              >
+                <option value="easy">Easy (100 points)</option>
+                <option value="medium">Medium (300 points)</option>
+                <option value="hard">Hard (500 points)</option>
+              </select>
+              <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                <p className="text-sm text-blue-400">
+                  Solvers will earn <span className="font-bold">{getPointsReward(form.difficulty)} points</span> for completing this challenge
+                </p>
+                <p className="text-xs text-blue-300 mt-1">
+                  You'll earn <span className="font-bold">500 points</span> for creating this challenge
+                </p>
+              </div>
             </div>
 
             {/* Flag Solution */}
