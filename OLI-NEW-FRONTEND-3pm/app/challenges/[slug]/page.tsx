@@ -12,7 +12,8 @@ import bs58 from "bs58";
 import { SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { web3, AnchorProvider, Program, BN } from "@coral-xyz/anchor";
 import "../../globals.css";
-import { CtfAnchor } from "../../../target/types/ctf_anchor";
+//import { CtfAnchor } from "../../../target/types/ctf_anchor";
+import { CtfAnchor } from "@/rust-config/ctf_anchor";
 import * as assert from "assert";
 
 //import idl from "@/target/idl/ctf_anchor.json"; // Anchor IDL
