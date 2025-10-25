@@ -15,7 +15,6 @@ import "../../globals.css";
 import { CtfAnchor } from "../../../target/types/ctf_anchor";
 import * as assert from "assert";
 
-
 import idl from "@/target/idl/ctf_anchor.json"; // Anchor IDL
 
 const PROGRAM_ID = new web3.PublicKey(
@@ -62,32 +61,31 @@ const FileDownloadLink = ({
   );
 };
 
-
-
 export default function ChallengePage() {
-
   async function computeFlagSha256(flagString: string) {
     console.log("🧩 [computeFlagSha256] Starting with:", flagString);
-  
+
     try {
       console.log("🧩 [computeFlagSha256] Checking crypto:", typeof crypto);
       console.log("🧩 [computeFlagSha256] crypto object:", crypto);
       console.log("🧩 [computeFlagSha256] crypto.subtle:", crypto?.subtle);
-  
+
       if (!crypto || !crypto.subtle) {
-        throw new Error("crypto.subtle is undefined — wrong environment or shadowed import");
+        throw new Error(
+          "crypto.subtle is undefined — wrong environment or shadowed import",
+        );
       }
-  
+
       const enc = new TextEncoder();
       const data = enc.encode(flagString);
       console.log("🧩 [computeFlagSha256] Encoded data:", data);
-  
+
       const hashBuffer = await crypto.subtle.digest("SHA-256", data);
       console.log("🧩 [computeFlagSha256] hashBuffer:", hashBuffer);
-  
+
       const hashArray = new Uint8Array(hashBuffer);
       console.log("🧩 [computeFlagSha256] Final hashArray:", hashArray);
-  
+
       return hashArray;
     } catch (err) {
       console.error("❌ [computeFlagSha256] FAILED:", err);
@@ -95,6 +93,7 @@ export default function ChallengePage() {
     }
   }
   const params = useParams();
+  const submitFlag = useMutation(api.myFunctions.submitFlag);
   const slug = params.slug as string;
   const { publicKey, signMessage, sendTransaction } = useWallet();
   const { connection } = useConnection();
@@ -171,8 +170,6 @@ export default function ChallengePage() {
 
     setIsSubmitting(true);
     try {
-
-
       let bump = challenge.bump;
       const connection = new web3.Connection("https://api.devnet.solana.com");
 
@@ -183,15 +180,19 @@ export default function ChallengePage() {
 
       //Through context connect my phantom wallet to anchor
       const program = new Program<CtfAnchor>(idl as CtfAnchor, provider);
-      const tx = await program.methods
-        .submitGuess(flagSubmission.trim(), bump)
-        .accounts({
-          guesser: publicKey,
-          challenge: challenge.challengePDA,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-      console.log("User guess amde it through:", tx);
+      try {
+        const tx = await program.methods
+          .submitGuess(flagSubmission.trim(), bump)
+          .accounts({
+            guesser: publicKey,
+            challenge: challenge.challengePDA,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        console.log("User guess made it through:", tx);
+      } catch (txErr: any) {
+        console.warn("Transaction failed, continuing with hash check:", txErr);
+      }
       const hashBytes = await computeFlagSha256(flagSubmission.trim());
       const newComparison = new Uint8Array(32);
       newComparison.set(hashBytes);
@@ -199,6 +200,12 @@ export default function ChallengePage() {
         console.log("ALL THE LOGIC TO THEN ASSIGN POINTS CAN GO HERE");
         //Set the flag to solved
         //Check if its been previousley solved if NOT then woah first place otherwise then asign points form 1 - 3
+        const result = await submitFlag({
+          challengeId: challenge._id,
+          userPublicKey: publicKey.toBase58(),
+          flagSubmission: flagSubmission.trim(),
+        });
+        console.log(result);
       } else {
         console.log("Submitted:", newComparison);
         console.log("Stored:", challenge.flagHash);
@@ -375,6 +382,7 @@ export default function ChallengePage() {
         </div>
 
         {/* Challenge Header */}
+        {/* Challenge Header */}
         <div className="mb-6 p-6 bg-foreground/5 border border-foreground/10 rounded-lg">
           <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
             <div className="flex items-center gap-3 flex-wrap">
@@ -403,6 +411,17 @@ export default function ChallengePage() {
                 {challenge.prizeAmount} SOL
               </div>
               <div className="text-sm text-foreground/60">Prize Pool</div>
+
+              {/* Display solved/no prize message */}
+              {challenge.solveCount !== undefined &&
+                challenge.solveCount >= 1 && (
+                  <div className="mt-1 text-sm text-red-400 font-medium">
+                    ⚠️ This challenge has already been solved (
+                    {challenge.solveCount}{" "}
+                    {challenge.solveCount === 1 ? "solver" : "solvers"}). No
+                    prize remaining. But Solve for points.
+                  </div>
+                )}
             </div>
           </div>
 
@@ -415,37 +434,6 @@ export default function ChallengePage() {
               {challenge.flagDetails}
             </p>
           )}
-
-          {/* Creator Info & Tip Button */}
-          <div className="flex items-center justify-between pt-4 border-t border-foreground/10">
-            <div className="text-sm text-foreground/60">
-              {challenge.creatorPublicKey ? (
-                <>
-                  Created by{" "}
-                  <Link
-                    href={`/profile/${challenge.creatorPublicKey}`}
-                    className="font-mono text-blue-400 hover:text-blue-300 transition"
-                  >
-                    {challenge.creatorPublicKey.slice(0, 6)}...
-                    {challenge.creatorPublicKey.slice(-4)}
-                  </Link>
-                </>
-              ) : (
-                <span className="font-mono text-foreground/40">
-                  Creator: Unknown
-                </span>
-              )}
-            </div>
-            {challenge.creatorPublicKey && (
-              <button
-                onClick={() => setShowTipModal(true)}
-                disabled={!isSignedIn}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm flex items-center gap-2"
-              >
-                Tip Creator
-              </button>
-            )}
-          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

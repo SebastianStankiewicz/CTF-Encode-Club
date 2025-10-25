@@ -62,6 +62,79 @@ export const getFileUrl = query({
 });
 
 // ==================== CHALLENGES ====================
+export const submitFlag = mutation({
+  args: {
+    challengeId: v.id("challenges"),
+    userPublicKey: v.string(),
+    flagSubmission: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Get challenge
+    const challenge = await ctx.db.get(args.challengeId);
+    if (!challenge) throw new Error("Challenge not found");
+
+    // Check if already solved
+    const existingSolve = await ctx.db
+      .query("solves")
+      .filter((q) => 
+        q.and(
+          q.eq(q.field("challengeId"), args.challengeId),
+          q.eq(q.field("userPublicKey"), args.userPublicKey)
+        )
+      )
+      .first();
+
+    if (existingSolve) {
+      return { 
+        success: false, 
+        message: "You've already solved this challenge!",
+        pointsEarned: 0
+      };
+    }
+
+    // Verify flag
+    if (args.flagSubmission.trim() !== challenge.flagSolution) {
+      return { 
+        success: false, 
+        message: "Incorrect flag. Try again!",
+        pointsEarned: 0
+      };
+    }
+
+    // Record solve
+    await ctx.db.insert("solves", {
+      challengeId: args.challengeId,
+      userPublicKey: args.userPublicKey,
+      solvedAt: Date.now(),
+      pointsEarned: challenge.pointsReward || 0,
+    });
+
+    // Update challenge solve count
+    await ctx.db.patch(args.challengeId, {
+      solveCount: (challenge.solveCount || 0) + 1,
+    });
+
+    // Update user points
+    const user = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("publicKey"), args.userPublicKey))
+      .first();
+
+    if (user) {
+      await ctx.db.patch(user._id, {
+        score: (user.score || 0) + (challenge.pointsReward || 0),
+      });
+    }
+
+    return {
+      success: true,
+      message: `Correct! You earned ${challenge.pointsReward} points!`,
+      pointsEarned: challenge.pointsReward || 0,
+    };
+  },
+});
+
+
 
 export const addChallenge = mutation({
   args: {
