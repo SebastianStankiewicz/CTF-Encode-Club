@@ -137,11 +137,7 @@ export default function ChallengePage() {
 
       if (result.status === "created" || result.status === "logged_in") {
         setIsSignedIn(true);
-        alert(
-          `Welcome ${result.status === "created" ? "new user" : "back"}: ${publicKey
-            .toBase58()
-            .slice(0, 6)}...`,
-        );
+        
       }
     } catch (err) {
       console.error("Signing failed:", err);
@@ -287,7 +283,7 @@ export default function ChallengePage() {
       });
 
       setCommentText("");
-      alert("Comment added successfully!");
+
     } catch (err) {
       console.error("Comment failed:", err);
       alert("Failed to add comment. Please try again.");

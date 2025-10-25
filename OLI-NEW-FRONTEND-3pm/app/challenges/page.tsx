@@ -46,11 +46,7 @@ function Content() {
 
       if (result.status === "created" || result.status === "logged_in") {
         setIsSignedIn(true);
-        alert(
-          `Welcome ${result.status === "created" ? "new user" : "back"}: ${
-            publicKey.toBase58().slice(0, 6)
-          }...`
-        );
+        console.log("Singed in")
       }
     } catch (err) {
       console.error("Signing failed:", err);

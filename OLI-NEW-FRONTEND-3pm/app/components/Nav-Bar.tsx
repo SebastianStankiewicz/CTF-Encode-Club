@@ -99,10 +99,10 @@ export default function Navbar() {
       });
 
       if (result.status === "created") {
-        alert(`Welcome new user: ${publicKey.toBase58().slice(0, 6)}...`);
+        //(`Welcome new user: ${publicKey.toBase58().slice(0, 6)}...`);
         setIsSignedIn(true);
       } else if (result.status === "logged_in") {
-        alert(`Welcome back, ${publicKey.toBase58().slice(0, 6)}...`);
+        //alert(`Welcome back, ${publicKey.toBase58().slice(0, 6)}...`);
         setIsSignedIn(true);
       } else {
         setIsSignedIn(true); // Fallback for successful verification
