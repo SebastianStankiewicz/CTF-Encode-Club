@@ -78,6 +78,7 @@ export const addChallenge = mutation({
     hintReleaseDate: v.optional(v.string()),
     fileNames: v.optional(v.array(v.string())),
     creatorPublicKey: v.string(),
+    challengePDA: v.string()
   },
   handler: async (ctx, args) => {
     const { creatorPublicKey, ...challengeData } = args;
@@ -99,7 +100,12 @@ export const getChallengeBySlug = query({
       .filter((q) => q.eq(q.field("_id"), args.slug))
       .first();
 
-    return challenge ?? null;
+    if (!challenge) return null;
+
+    // Destructure to exclude the flagSolution
+    const { flagSolution, ...publicChallengeData } = challenge;
+
+    return publicChallengeData;
   },
 });
 

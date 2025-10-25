@@ -10,13 +10,31 @@ import { api } from "../../../convex/_generated/api";
 import { useAuth } from "@/app/providers/auth-context";
 import bs58 from "bs58";
 import { SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import * as web3 from "@solana/web3.js";
+import { web3, AnchorProvider, Program, BN } from "@coral-xyz/anchor";
 import "../../globals.css";
+import { CtfAnchor } from "../../../target/types/ctf_anchor";
+import * as assert from "assert";
+import crypto from "crypto";
+
+
+import idl from "@/target/idl/ctf_anchor.json"; // Anchor IDL
+
+const PROGRAM_ID = new web3.PublicKey(
+  "9NYLcKqUvux8fz8qxpwnEveosrZS7TG6oHn1FSPLkMjt"
+); // CHANGE THIS TO THE NEW CONTRACT ADDY 
 
 // File Download Component - MUST be outside ChallengePage
-const FileDownloadLink = ({ storageId, fileName, index }: { storageId: string; fileName?: string; index: number }) => {
+const FileDownloadLink = ({
+  storageId,
+  fileName,
+  index,
+}: {
+  storageId: string;
+  fileName?: string;
+  index: number;
+}) => {
   const fileUrl = useQuery(api.myFunctions.getFileUrl, { storageId });
-  
+
   if (!fileUrl) {
     return (
       <div className="p-3 bg-foreground/5 border border-foreground/10 rounded-lg">
@@ -27,9 +45,9 @@ const FileDownloadLink = ({ storageId, fileName, index }: { storageId: string; f
       </div>
     );
   }
-  
+
   const displayName = fileName || `File ${index + 1}`;
-  
+
   return (
     <a
       href={fileUrl}
@@ -51,11 +69,11 @@ export default function ChallengePage() {
   const { publicKey, signMessage, sendTransaction } = useWallet();
   const { connection } = useConnection();
   const { isSignedIn, setIsSignedIn } = useAuth();
-  
+
   const challenge = useQuery(api.myFunctions.getChallengeBySlug, { slug });
   const comments = useQuery(
     api.myFunctions.getChallengeComments,
-    challenge ? { challengeId: challenge._id } : "skip"
+    challenge ? { challengeId: challenge._id } : "skip",
   );
   const verifyOrCreateUser = useMutation(api.myFunctions.verifyOrCreateUser);
   const addComment = useMutation(api.myFunctions.addComment);
@@ -64,13 +82,16 @@ export default function ChallengePage() {
   const [flagSubmission, setFlagSubmission] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const [submissionResult, setSubmissionResult] = useState<{ success: boolean; message: string } | null>(null);
-  
+  const [submissionResult, setSubmissionResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
   // Tipping state
   const [tipAmount, setTipAmount] = useState("");
   const [isTipping, setIsTipping] = useState(false);
   const [showTipModal, setShowTipModal] = useState(false);
-  
+
   // Comment state
   const [commentText, setCommentText] = useState("");
   const [isCommenting, setIsCommenting] = useState(false);
@@ -95,9 +116,9 @@ export default function ChallengePage() {
       if (result.status === "created" || result.status === "logged_in") {
         setIsSignedIn(true);
         alert(
-          `Welcome ${result.status === "created" ? "new user" : "back"}: ${
-            publicKey.toBase58().slice(0, 6)
-          }...`
+          `Welcome ${result.status === "created" ? "new user" : "back"}: ${publicKey
+            .toBase58()
+            .slice(0, 6)}...`,
         );
       }
     } catch (err) {
@@ -108,6 +129,7 @@ export default function ChallengePage() {
     }
   }, [publicKey, signMessage, verifyOrCreateUser, setIsSignedIn]);
 
+  //const program = anchor.workspace.ctfAnchor as Program<CtfAnchor>;
   // Submit flag handler
   const handleFlagSubmit = async () => {
     if (!flagSubmission.trim()) {
@@ -117,26 +139,42 @@ export default function ChallengePage() {
 
     if (!challenge) return;
 
+
     setIsSubmitting(true);
     try {
-      if (flagSubmission.trim() === challenge.flagSolution) {
-        setSubmissionResult({
-          success: true,
-          message: `Correct! You solved the challenge and earned ${challenge.prizeAmount} SOL.`,
-        });
-        setFlagSubmission("");
+      let bump = challenge.bump
+      const connection = new web3.Connection("https://api.devnet.solana.com");
+      
+      // Use window.solana (Phantom wallet) directly as the wallet adapter
+      const provider = new AnchorProvider(
+        connection,
+        window.solana,
+        { preflightCommitment: "processed" }
+      );
+
+      //Through context connect my phantom wallet to anchor
+      const program = new Program<CtfAnchor>(idl as CtfAnchor, provider);
+      const tx = await program.methods
+      .submitGuess(flagSubmission.trim(), bump)
+      .accounts({
+        guesser: publicKey,
+        challenge: challenge.challengePDA,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+      console.log("User guess amde it through:", tx);
+
+    } catch (err: any) {
+      // If the tx fails, print all logs
+      if (err.logs) {
+        console.log("Transaction logs:");
+        err.logs.forEach((l: string) => console.log(l));
+      } else if (err.error?.logs) {
+        console.log("Transaction logs:");
+        err.error.logs.forEach((l: string) => console.log(l));
       } else {
-        setSubmissionResult({
-          success: false,
-          message: "Incorrect flag. Try again.",
-        });
+        console.error(err);
       }
-    } catch (err) {
-      console.error("Flag submission failed:", err);
-      setSubmissionResult({
-        success: false,
-        message: "Error submitting flag. Please try again.",
-      });
     } finally {
       setIsSubmitting(false);
     }
@@ -145,7 +183,11 @@ export default function ChallengePage() {
   // Tip handler
   const handleTip = async () => {
     if (!publicKey || !challenge || !tipAmount || !challenge.creatorPublicKey) {
-      alert(!challenge.creatorPublicKey ? "Creator information not available for this challenge." : "Please enter a tip amount.");
+      alert(
+        !challenge.creatorPublicKey
+          ? "Creator information not available for this challenge."
+          : "Please enter a tip amount.",
+      );
       return;
     }
 
@@ -159,21 +201,21 @@ export default function ChallengePage() {
     try {
       // Get creator's public key
       const creatorPubkey = new web3.PublicKey(challenge.creatorPublicKey);
-      
+
       // Create transaction
       const transaction = new web3.Transaction().add(
         SystemProgram.transfer({
           fromPubkey: publicKey,
           toPubkey: creatorPubkey,
           lamports: amount * LAMPORTS_PER_SOL,
-        })
+        }),
       );
 
       // Send transaction
       const signature = await sendTransaction(transaction, connection);
-      
+
       // Wait for confirmation
-      await connection.confirmTransaction(signature, 'confirmed');
+      await connection.confirmTransaction(signature, "confirmed");
 
       // Record tip in database
       await recordTip({
@@ -302,8 +344,8 @@ export default function ChallengePage() {
                   status === "active"
                     ? "bg-green-500/10 text-green-400 border border-green-500/20"
                     : status === "upcoming"
-                    ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                    : "bg-red-500/10 text-red-400 border border-red-500/20"
+                      ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                      : "bg-red-500/10 text-red-400 border border-red-500/20"
                 }`}
               >
                 {status.toUpperCase()}
@@ -318,7 +360,9 @@ export default function ChallengePage() {
               )}
             </div>
             <div className="text-right">
-              <div className="text-3xl font-bold text-blue-400">{challenge.prizeAmount} SOL</div>
+              <div className="text-3xl font-bold text-blue-400">
+                {challenge.prizeAmount} SOL
+              </div>
               <div className="text-sm text-foreground/60">Prize Pool</div>
             </div>
           </div>
@@ -343,11 +387,14 @@ export default function ChallengePage() {
                     href={`/profile/${challenge.creatorPublicKey}`}
                     className="font-mono text-blue-400 hover:text-blue-300 transition"
                   >
-                    {challenge.creatorPublicKey.slice(0, 6)}...{challenge.creatorPublicKey.slice(-4)}
+                    {challenge.creatorPublicKey.slice(0, 6)}...
+                    {challenge.creatorPublicKey.slice(-4)}
                   </Link>
                 </>
               ) : (
-                <span className="font-mono text-foreground/40">Creator: Unknown</span>
+                <span className="font-mono text-foreground/40">
+                  Creator: Unknown
+                </span>
               )}
             </div>
             {challenge.creatorPublicKey && (
@@ -366,12 +413,18 @@ export default function ChallengePage() {
           {/* Left Section - Challenge Details & Comments */}
           <div className="lg:col-span-2 space-y-6">
             <div className="p-6 border border-foreground/10 bg-foreground/5 rounded-lg">
-              <h2 className="text-xl font-semibold font-mono mb-4">Challenge Information</h2>
+              <h2 className="text-xl font-semibold font-mono mb-4">
+                Challenge Information
+              </h2>
 
               {challenge.flagFormat && (
                 <div className="mb-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                  <h3 className="font-semibold text-blue-400 mb-2">Flag Format</h3>
-                  <code className="text-blue-300 font-mono text-sm">{challenge.flagFormat}</code>
+                  <h3 className="font-semibold text-blue-400 mb-2">
+                    Flag Format
+                  </h3>
+                  <code className="text-blue-300 font-mono text-sm">
+                    {challenge.flagFormat}
+                  </code>
                 </div>
               )}
 
@@ -379,11 +432,15 @@ export default function ChallengePage() {
                 <div className="mb-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
                   <h3 className="font-semibold text-blue-400 mb-2">Hint</h3>
                   {hintVisible ? (
-                    <p className="text-blue-300 whitespace-pre-wrap">{challenge.hint}</p>
+                    <p className="text-blue-300 whitespace-pre-wrap">
+                      {challenge.hint}
+                    </p>
                   ) : (
                     <p className="text-blue-400/60">
                       Hint will be released on{" "}
-                      {new Date(challenge.hintReleaseDate!).toLocaleDateString()}
+                      {new Date(
+                        challenge.hintReleaseDate!,
+                      ).toLocaleDateString()}
                     </p>
                   )}
                 </div>
@@ -393,7 +450,6 @@ export default function ChallengePage() {
               {challenge.files && challenge.files.length > 0 && (
                 <div className="mt-6">
                   <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                    <span>📁</span>
                     <span>Challenge Files</span>
                     <span className="text-sm text-foreground/60 font-normal">
                       ({challenge.files.length})
@@ -446,9 +502,13 @@ export default function ChallengePage() {
               {/* Comments List */}
               <div className="space-y-4">
                 {comments === undefined ? (
-                  <p className="text-foreground/60 text-center py-4">Loading comments...</p>
+                  <p className="text-foreground/60 text-center py-4">
+                    Loading comments...
+                  </p>
                 ) : comments.length === 0 ? (
-                  <p className="text-foreground/60 text-center py-4">No comments yet. Be the first to comment!</p>
+                  <p className="text-foreground/60 text-center py-4">
+                    No comments yet. Be the first to comment!
+                  </p>
                 ) : (
                   comments.map((comment: any) => (
                     <div
@@ -456,17 +516,28 @@ export default function ChallengePage() {
                       className="p-4 bg-foreground/5 border border-foreground/10 rounded-lg"
                     >
                       <div className="flex items-start justify-between mb-2">
-                        <Link
-                          href={`/profile/${comment.publicKey}`}
-                          className="font-mono text-sm text-blue-400 hover:text-blue-300 transition"
-                        >
-                          {comment.publicKey.slice(0, 6)}...{comment.publicKey.slice(-4)}
-                        </Link>
+                        {comment.userPublicKey ? (
+                          <Link
+                            href={`/profile/${comment.userPublicKey}`}
+                            className="font-mono text-sm text-blue-400 hover:text-blue-300 transition"
+                          >
+                            {comment.userPublicKey.slice(0, 6)}...
+                            {comment.userPublicKey.slice(-4)}
+                          </Link>
+                        ) : (
+                          <span className="font-mono text-sm text-foreground/40">
+                            Unknown User
+                          </span>
+                        )}
                         <span className="text-xs text-foreground/50">
-                          {new Date(comment._creationTime).toLocaleString()}
+                          {new Date(
+                            comment.createdAt || comment._creationTime,
+                          ).toLocaleString()}
                         </span>
                       </div>
-                      <p className="text-foreground/80 whitespace-pre-wrap">{comment.text}</p>
+                      <p className="text-foreground/80 whitespace-pre-wrap">
+                        {comment.text}
+                      </p>
                     </div>
                   ))
                 )}
@@ -480,7 +551,8 @@ export default function ChallengePage() {
               <div className="p-6 border border-foreground/10 bg-foreground/5 rounded-lg">
                 <h3 className="text-lg font-semibold mb-3">Sign In Required</h3>
                 <p className="text-foreground/70 mb-4 text-sm">
-                  Connect your wallet and sign in to submit flags and earn rewards.
+                  Connect your wallet and sign in to submit flags and earn
+                  rewards.
                 </p>
                 <button
                   onClick={handleSignIn}
@@ -513,7 +585,9 @@ export default function ChallengePage() {
                         onChange={(e) => setFlagSubmission(e.target.value)}
                         placeholder="Enter your flag here..."
                         className="w-full p-3 border border-foreground/20 rounded-lg bg-background/50 text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition font-mono"
-                        onKeyPress={(e) => e.key === "Enter" && handleFlagSubmit()}
+                        onKeyPress={(e) =>
+                          e.key === "Enter" && handleFlagSubmit()
+                        }
                       />
                     </div>
 
@@ -537,7 +611,9 @@ export default function ChallengePage() {
                   >
                     <p
                       className={`font-medium ${
-                        submissionResult.success ? "text-green-400" : "text-red-400"
+                        submissionResult.success
+                          ? "text-green-400"
+                          : "text-red-400"
                       }`}
                     >
                       {submissionResult.message}
@@ -584,9 +660,12 @@ export default function ChallengePage() {
       {showTipModal && challenge.creatorPublicKey && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-background border border-foreground/10 rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-2xl font-bold mb-4">💰 Tip Challenge Creator</h3>
+            <h3 className="text-2xl font-bold mb-4">
+              💰 Tip Challenge Creator
+            </h3>
             <p className="text-foreground/70 mb-4 text-sm">
-              Support the creator of this challenge by sending them SOL directly on-chain.
+              Support the creator of this challenge by sending them SOL directly
+              on-chain.
             </p>
 
             <div className="mb-4">
