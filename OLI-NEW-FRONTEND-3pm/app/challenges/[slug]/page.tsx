@@ -14,14 +14,13 @@ import { web3, AnchorProvider, Program, BN } from "@coral-xyz/anchor";
 import "../../globals.css";
 import { CtfAnchor } from "../../../target/types/ctf_anchor";
 import * as assert from "assert";
-import crypto from "crypto";
 
 
 import idl from "@/target/idl/ctf_anchor.json"; // Anchor IDL
 
 const PROGRAM_ID = new web3.PublicKey(
-  "9NYLcKqUvux8fz8qxpwnEveosrZS7TG6oHn1FSPLkMjt"
-); // CHANGE THIS TO THE NEW CONTRACT ADDY 
+  "9NYLcKqUvux8fz8qxpwnEveosrZS7TG6oHn1FSPLkMjt",
+); // CHANGE THIS TO THE NEW CONTRACT ADDY
 
 // File Download Component - MUST be outside ChallengePage
 const FileDownloadLink = ({
@@ -63,7 +62,38 @@ const FileDownloadLink = ({
   );
 };
 
+
+
 export default function ChallengePage() {
+
+  async function computeFlagSha256(flagString: string) {
+    console.log("🧩 [computeFlagSha256] Starting with:", flagString);
+  
+    try {
+      console.log("🧩 [computeFlagSha256] Checking crypto:", typeof crypto);
+      console.log("🧩 [computeFlagSha256] crypto object:", crypto);
+      console.log("🧩 [computeFlagSha256] crypto.subtle:", crypto?.subtle);
+  
+      if (!crypto || !crypto.subtle) {
+        throw new Error("crypto.subtle is undefined — wrong environment or shadowed import");
+      }
+  
+      const enc = new TextEncoder();
+      const data = enc.encode(flagString);
+      console.log("🧩 [computeFlagSha256] Encoded data:", data);
+  
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      console.log("🧩 [computeFlagSha256] hashBuffer:", hashBuffer);
+  
+      const hashArray = new Uint8Array(hashBuffer);
+      console.log("🧩 [computeFlagSha256] Final hashArray:", hashArray);
+  
+      return hashArray;
+    } catch (err) {
+      console.error("❌ [computeFlagSha256] FAILED:", err);
+      throw err;
+    }
+  }
   const params = useParams();
   const slug = params.slug as string;
   const { publicKey, signMessage, sendTransaction } = useWallet();
@@ -139,31 +169,40 @@ export default function ChallengePage() {
 
     if (!challenge) return;
 
-
     setIsSubmitting(true);
     try {
-      let bump = challenge.bump
+
+
+      let bump = challenge.bump;
       const connection = new web3.Connection("https://api.devnet.solana.com");
-      
+
       // Use window.solana (Phantom wallet) directly as the wallet adapter
-      const provider = new AnchorProvider(
-        connection,
-        window.solana,
-        { preflightCommitment: "processed" }
-      );
+      const provider = new AnchorProvider(connection, window.solana, {
+        preflightCommitment: "processed",
+      });
 
       //Through context connect my phantom wallet to anchor
       const program = new Program<CtfAnchor>(idl as CtfAnchor, provider);
       const tx = await program.methods
-      .submitGuess(flagSubmission.trim(), bump)
-      .accounts({
-        guesser: publicKey,
-        challenge: challenge.challengePDA,
-        systemProgram: SystemProgram.programId,
-      })
-      .rpc();
+        .submitGuess(flagSubmission.trim(), bump)
+        .accounts({
+          guesser: publicKey,
+          challenge: challenge.challengePDA,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
       console.log("User guess amde it through:", tx);
-
+      const hashBytes = await computeFlagSha256(flagSubmission.trim());
+      const newComparison = new Uint8Array(32);
+      newComparison.set(hashBytes);
+      if (String(newComparison) === challenge.flagHash) {
+        console.log("ALL THE LOGIC TO THEN ASSIGN POINTS CAN GO HERE");
+        //Set the flag to solved
+        //Check if its been previousley solved if NOT then woah first place otherwise then asign points form 1 - 3
+      } else {
+        console.log("Submitted:", newComparison);
+        console.log("Stored:", challenge.flagHash);
+      }
     } catch (err: any) {
       // If the tx fails, print all logs
       if (err.logs) {

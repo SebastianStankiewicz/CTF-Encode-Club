@@ -173,7 +173,8 @@ export default function Content() {
         hint: form.hint || undefined,
         hintReleaseDate: form.hintReleaseDate || undefined,
         creatorPublicKey: publicKey.toBase58(), // Add this
-        challengePDA: challengePda.toBase58()
+        challengePDA: challengePda.toBase58(),
+        flagHash: String(flagHash),
       });
 
       alert("Challenge created successfully!");

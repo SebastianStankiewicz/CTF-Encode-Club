@@ -78,7 +78,8 @@ export const addChallenge = mutation({
     hintReleaseDate: v.optional(v.string()),
     fileNames: v.optional(v.array(v.string())),
     creatorPublicKey: v.string(),
-    challengePDA: v.string()
+    challengePDA: v.string(),
+    flagHash: v.string(),
   },
   handler: async (ctx, args) => {
     const { creatorPublicKey, ...challengeData } = args;
