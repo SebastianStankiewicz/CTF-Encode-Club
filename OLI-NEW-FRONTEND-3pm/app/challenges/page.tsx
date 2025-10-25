@@ -133,20 +133,6 @@ function Content() {
           Solve capture-the-flag challenges and earn SOL prizes
         </p>
 
-        {!isSignedIn && (
-          <div className="flex items-center gap-4 mt-6 p-4 bg-foreground/5 border border-foreground/10 rounded-lg">
-            <button
-              onClick={handleSignIn}
-              disabled={!connected || isSigningIn}
-              className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:opacity-50 font-medium"
-            >
-              {isSigningIn ? "Signing In..." : "Sign In to Participate"}
-            </button>
-            <p className="text-sm text-foreground/60">
-              Connect your wallet and sign in to submit flags
-            </p>
-          </div>
-        )}
       </div>
 
       {/* Filters */}
@@ -300,7 +286,7 @@ function Content() {
                   </div>
 
                   <h3 className="text-lg font-semibold font-mono mb-3 group-hover:text-blue-600 transition-colors">
-                    Challenge #{challenge._id.slice(-6)}
+                    {challenge.title}
                   </h3>
 
                   <p className="text-foreground/80 text-sm mb-4 line-clamp-3">

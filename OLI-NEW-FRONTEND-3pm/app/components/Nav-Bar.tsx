@@ -178,7 +178,7 @@ export default function Navbar() {
                 className="flex items-center gap-2 font-mono text-lg font-semibold tracking-tighter text-foreground hover:opacity-80"
               >
                 <span className="text-foreground/50">/</span>
-                <span>SolFlag</span>
+                <span>Capture The SOL</span>
               </Link>
             </div>
 
@@ -283,7 +283,7 @@ export default function Navbar() {
             className="flex items-center gap-2 font-mono text-lg font-semibold"
           >
             <span className="text-foreground/50">/</span>
-            <span>SolFlag</span>
+            <span>Capture The SOL</span>
           </Link>
 
           <button

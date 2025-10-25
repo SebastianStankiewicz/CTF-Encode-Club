@@ -153,6 +153,7 @@ export const addChallenge = mutation({
     creatorPublicKey: v.string(),
     challengePDA: v.string(),
     flagHash: v.string(),
+    difficulty: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { creatorPublicKey, ...challengeData } = args;
