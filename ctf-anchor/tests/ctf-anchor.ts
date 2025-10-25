@@ -33,7 +33,7 @@ describe("ctf-anchor (SOL deposit + rehashed guesses)", () => {
   );
 
   it("Creates a challenge with 0.01 SOL deposit", async () => {
-    const depositSol = 0.001;
+    const depositSol = 0.01;
     const depositLamports = new anchor.BN(depositSol * LAMPORTS_PER_SOL);
 
     const beforeBalance = await provider.connection.getBalance(challengePda);

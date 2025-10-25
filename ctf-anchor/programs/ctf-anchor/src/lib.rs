@@ -73,33 +73,35 @@ pub mod ctf_anchor {
         if challenge.flag_hash == guess_bytes {
             challenge.is_solved = true;
             msg!("Correct guess! Challenge solved by {}", ctx.accounts.guesser.key());
-    
-            // Transfer all lamports from PDA to guesser
-            let pda_lamports = **challenge_info.lamports.borrow();
-            if pda_lamports > 0 {
-                let seeds = &[
-                    b"challenge",
-                    challenge.creator.as_ref(),
-                    &challenge.challenge_id.to_le_bytes(),
-                    &[bump],
-                ];
-                let signer_seeds = &[&seeds[..]];
-    
-                let ix = anchor_lang::solana_program::system_instruction::transfer(
-                    &challenge_info.key(),
-                    &guesser_info.key(),
-                    pda_lamports,
-                );
-    
-                anchor_lang::solana_program::program::invoke_signed(
-                    &ix,
-                    &[challenge_info.clone(), guesser_info.clone(), system_program_info],
-                    signer_seeds,
-                )?;
-    
-                msg!("Transferred {} lamports from PDA to guesser", pda_lamports);
-            }
-        } else {
+        
+            // Transfer lamports but keep PDA alive
+            let seeds = &[
+                b"challenge",
+                challenge.creator.as_ref(),
+                &challenge.challenge_id.to_le_bytes(),
+                &[bump],
+            ];
+        
+            let challenge_info = ctx.accounts.challenge.to_account_info();
+            let guesser_info = ctx.accounts.guesser.to_account_info();
+        
+            // Compute rent-exempt minimum for the PDA
+            let rent = Rent::get()?;
+            let min_balance = rent.minimum_balance(challenge_info.data_len());
+        
+            let total_lamports = **challenge_info.lamports.borrow();
+            // Only transfer the lamports above the minimum balance
+            let lamports_to_transfer = total_lamports.saturating_sub(min_balance);
+        
+            **guesser_info.lamports.borrow_mut() += lamports_to_transfer;
+            **challenge_info.lamports.borrow_mut() -= lamports_to_transfer;
+        
+            msg!(
+                "Transferred {} lamports to guesser, PDA remains rent-exempt with {} lamports",
+                lamports_to_transfer,
+                **challenge_info.lamports.borrow()
+            );
+        }else {
             msg!("Incorrect guess.");
         }
     
