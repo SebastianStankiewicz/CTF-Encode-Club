@@ -3,6 +3,8 @@
 **Capture the SOL** is a blockchain-powered Capture the Flag (CTF) ecosystem built on **Solana**.
 It combines Web3 smart contracts with a modern Web2 interface to create a fun, educational, and competitive experience for security enthusiasts and blockchain learners alike.
 
+⚠️ Note Phantom wallet extension on the **Devnet** with a chrome browser is required :) ⚠️
+
 ---
 
 ## Overview
